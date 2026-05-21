@@ -1,6 +1,7 @@
 """
 King_photo - 程序入口
 图片元信息编辑与修复工具
+11
 """
 
 import sys
