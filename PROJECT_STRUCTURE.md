@@ -21,13 +21,15 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.1.0
+**版本**: v1.3.0
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
 2. 批量重命名（支持20+变量）
 3. 文件修复（后缀修复、时间修复）
 4. 格式支持：JPEG、PNG、GIF、WebP、TIFF、HEIC、RAW、AVIF、SVG等
+5. **统一API层**：编程方式访问所有功能（v1.3.0新增）
+6. **插件系统**：动态扩展格式和功能支持（v1.3.0新增）
 
 ---
 
@@ -39,17 +41,17 @@ King_photo/
 │   ├── __init__.py               # 包初始化
 │   ├── main.py                   # 程序入口
 │   │
-│   ├── core/                     # 核心业务逻辑
+│   ├── core/                     # 核心业务逻辑 ⬅ 实现 I* 接口
 │   │   ├── __init__.py
-│   │   ├── format_detector.py    # 格式检测器
-│   │   ├── metadata_reader.py    # 元数据读取引擎
-│   │   ├── metadata_writer.py    # 元数据写入引擎
+│   │   ├── format_detector.py    # 格式检测器 (IFormatDetector)
+│   │   ├── metadata_reader.py    # 元数据读取引擎 (IMetadataReader)
+│   │   ├── metadata_writer.py    # 元数据写入引擎 (IMetadataWriter)
 │   │   ├── exif_handler.py       # EXIF处理
 │   │   ├── xmp_handler.py        # XMP处理
-│   │   ├── repair_engine.py      # 修复引擎
-│   │   └── file_processor.py     # 文件处理器
+│   │   ├── repair_engine.py      # 修复引擎 (IRepairEngine)
+│   │   └── file_processor.py     # 文件处理器 (IFileProcessor)
 │   │
-│   ├── ui/                       # 用户界面
+│   ├── ui/                       # 用户界面 ⬅ 通过 get_api() 访问
 │   │   ├── __init__.py
 │   │   ├── app.py                # 主应用窗口
 │   │   ├── folder_view.py        # 文件夹模式视图
@@ -57,14 +59,29 @@ King_photo/
 │   │   ├── batch_dialog.py       # 批量操作对话框
 │   │   └── widgets.py            # 自定义UI组件
 │   │
+│   ├── api/                      # 统一API层（v1.3.0新增）
+│   │   ├── __init__.py           # API模块初始化 + 公共导出
+│   │   ├── interfaces.py         # 核心接口定义（ABC抽象类）
+│   │   ├── plugin_interfaces.py  # 插件接口定义（IFormat/IFunction/IExtension）
+│   │   ├── unified_api.py        # KingPhotoAPI 统一入口（get_api/reset_api）
+│   │   └── plugin_manager.py     # 插件管理器（加载/注册/管理）
+│   │
 │   └── utils/                    # 工具函数
 │       ├── __init__.py
 │       ├── constants.py          # 常量定义
 │       ├── helpers.py            # 辅助函数
 │       ├── exiftool_wrapper.py   # ExifTool封装
 │       ├── config_manager.py     # 配置管理器
+│       ├── config_center.py      # 统一配置中心（v1.3.0新增）
+│       ├── error_handler.py      # 统一错误处理（v1.3.0新增）
 │       ├── logging_config.py     # 日志配置
 │       └── error_report.py       # 错误报告
+│
+├── plugins/                      # 插件目录（v1.3.0新增）
+│   ├── formats/                  # 格式插件（PNG、HEIC、WebP、JPEG）
+│   ├── functions/                # 功能插件（批量重命名、批量修复、批量导出）
+│   ├── extensions/               # 扩展插件（水印等）
+│   └── plugin_config.json        # 插件配置文件
 │
 ├── assets/                       # 资源文件
 │   └── icons/                    # 图标资源
@@ -77,6 +94,15 @@ King_photo/
 │
 ├── tests/                        # 测试代码
 │   ├── __init__.py
+│   ├── conftest.py               # pytest配置和共享fixtures
+│   ├── api/                      # API层测试（v1.3.0新增）
+│   │   ├── __init__.py
+│   │   ├── test_unified_api.py   # KingPhotoAPI测试（39个）
+│   │   └── test_plugin_manager.py # PluginManager测试（18个）
+│   ├── plugins/                  # 插件测试（v1.3.0新增）
+│   │   ├── __init__.py
+│   │   ├── test_format_plugins.py    # 格式插件接口测试
+│   │   └── test_function_plugins.py  # 功能插件接口测试
 │   ├── test_format_detector.py
 │   ├── test_metadata_reader.py
 │   ├── test_metadata_writer.py
@@ -86,9 +112,11 @@ King_photo/
 │
 ├── run.py                        # 启动脚本
 ├── build.py                      # 打包脚本
+├── api_example.py                # API使用示例（v1.3.0新增）
 ├── test_program.py               # 程序测试脚本
 ├── requirements.txt              # 依赖列表
 ├── README.md                     # 项目说明
+├── PLUGIN_DOC.md                 # 插件开发文档（v1.3.0新增）
 ├── DEVELOPMENT_RULES.md          # 开发规则
 └── PROJECT_STRUCTURE.md          # 项目结构说明书（本文件）
 ```
@@ -264,7 +292,7 @@ King_photo/
 
 ### ui/ 目录
 
-用户界面层，使用tkinter + ttkbootstrap。
+用户界面层，使用tkinter + ttkbootstrap。UI层现在通过统一API访问核心模块，不再直接导入Core层。
 
 #### 1. app.py - 主应用窗口
 
@@ -285,7 +313,7 @@ King_photo/
 | `_batch_edit_metadata()` | 批量编辑元信息 |
 | `_repair_with_dialog()` | 修复对话框 |
 
-**依赖**: `folder_view`, `single_view`, `metadata_reader`, `repair_engine`, `config_manager`
+**依赖**: `folder_view`, `single_view`, `api`, `config_manager`
 
 **代码行数**: ~600行
 
@@ -374,6 +402,122 @@ King_photo/
 - `ProgressDialog`: 支持取消操作、进度回调
 
 **代码行数**: ~700行
+
+---
+
+### api/ 目录（v1.3.0 新增）
+
+统一API层，提供编程接口和插件系统。
+
+#### 1. unified_api.py - 统一API入口
+
+**职责**: 提供所有功能的统一编程访问接口
+
+**主要类**:
+- `KingPhotoAPI`: 统一API入口
+
+**辅助函数**:
+- `get_api(config_path, plugin_dir)`: 获取API单例实例
+- `reset_api()`: 重置API单例
+
+**API分类**:
+| 分类 | 方法 | 功能 |
+|------|------|------|
+| 格式检测 | `detect_format()`, `is_supported()`, `get_supported_formats()` | 文件格式检测 |
+| 元数据读取 | `read_metadata()`, `get_datetime()`, `get_summary()`, `get_editable_fields()`, `read_exif()`, `read_xmp()` | 读取元信息 |
+| 元数据写入 | `write_metadata()`, `write_metadata_from_filetime()`, `batch_write_metadata()`, `write_exif()`, `write_xmp()`, `copy_filetime_to_exif()` | 写入元信息 |
+| 修复 | `check_file_extension()`, `fix_extension()`, `extract_time_info()`, `repair_file()`, `batch_repair()`, `batch_repair_extension()` | 文件修复 |
+| 文件处理 | `get_image_files()`, `rename_files()`, `copy_files()`, `move_files()`, `delete_files()` | 文件操作 |
+| 插件管理 | `register_plugin()`, `get_plugins()`, `enable_plugin()`, `disable_plugin()` | 插件管理 |
+| 配置管理 | `get_config()`, `set_config()`, `save_config()`, `load_config()` | 配置操作 |
+| 工具函数 | `format_file_size()`, `format_datetime()`, `parse_datetime()`, `get_unique_filename()`, `sanitize_filename()` | 实用工具 |
+
+**依赖**: 延迟导入 `core/` 和 `utils/` 模块，通过 `_ensure_initialized()` 触发初始化
+
+**代码行数**: ~770行
+
+---
+
+#### 2. interfaces.py - 核心接口定义
+
+**职责**: 使用Python ABC定义核心模块的抽象接口
+
+**接口列表**:
+| 接口名 | 职责 | 抽象方法数 |
+|--------|------|------------|
+| `IFormatDetector` | 格式检测接口 | 5 |
+| `IMetadataReader` | 元数据读取接口 | 6 |
+| `IMetadataWriter` | 元数据写入接口 | 5 |
+| `IRepairEngine` | 修复引擎接口 | 5 |
+| `IFileProcessor` | 文件处理接口 | 6 |
+
+**代码行数**: ~200行
+
+---
+
+#### 3. plugin_interfaces.py - 插件接口定义
+
+**职责**: 定义三种插件类型的抽象接口
+
+**接口列表**:
+| 接口名 | 职责 | 核心方法 |
+|--------|------|----------|
+| `IFormatPlugin` | 格式插件（扩展新格式支持） | `read_metadata()`, `write_metadata()`, `get_datetime()` |
+| `IFunctionPlugin` | 功能插件（扩展新功能） | `execute()`, `get_parameters()` |
+| `IExtensionPlugin` | 扩展插件（拦截/增强现有功能） | `before_execute()`, `after_execute()`, `on_error()` |
+
+**代码行数**: ~170行
+
+---
+
+#### 4. plugin_manager.py - 插件管理器
+
+**职责**: 插件的加载、注册、管理和生命周期
+
+**主要类**:
+- `PluginManager`: 插件管理器
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `load_plugins(plugin_dir)` | 从目录加载所有插件 |
+| `register_format_plugin(plugin)` | 注册格式插件 |
+| `register_function_plugin(plugin)` | 注册功能插件 |
+| `register_extension_plugin(plugin)` | 注册扩展插件 |
+| `get_format_plugin(name)` | 按名称获取格式插件 |
+| `get_format_plugin_by_file(filepath)` | 按文件查找格式插件 |
+| `get_all_plugins()` | 获取所有已注册插件 |
+| `enable_plugin(name)` | 启用插件 |
+| `disable_plugin(name)` | 禁用插件 |
+
+**代码行数**: ~400行
+
+---
+
+### plugins/ 目录（v1.3.0 新增）
+
+#### 格式插件 (plugins/formats/)
+
+| 文件 | 插件类 | 支持的格式 |
+|------|--------|-----------|
+| `jpeg_plugin.py` | JPEGFormatPlugin | .jpg, .jpeg |
+| `png_plugin.py` | PNGFormatPlugin | .png |
+| `heic_plugin.py` | HEICFormatPlugin | .heic, .heif |
+| `webp_plugin.py` | WebPFormatPlugin | .webp |
+
+#### 功能插件 (plugins/functions/)
+
+| 文件 | 插件类 | 功能 |
+|------|--------|------|
+| `batch_rename_plugin.py` | BatchRenamePlugin | 批量重命名 |
+| `batch_repair_plugin.py` | BatchRepairPlugin | 批量修复 |
+| `batch_export_plugin.py` | BatchExportPlugin | 批量导出 |
+
+#### 扩展插件 (plugins/extensions/)
+
+| 文件 | 插件类 | 功能 |
+|------|--------|------|
+| `watermark_plugin.py` | WatermarkPlugin | 水印扩展 |
 
 ---
 
@@ -475,7 +619,52 @@ King_photo/
 
 ---
 
-#### 5. logging_config.py - 日志配置
+#### 5. config_center.py - 统一配置中心（v1.3.0新增）
+
+**职责**: 统一配置管理，支持观察者模式和配置验证
+
+**主要类**:
+- `ConfigCenter`: 统一配置中心
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `get(key, default)` | 获取配置项（支持点号分隔层级） |
+| `set(key, value)` | 设置配置项 |
+| `save()` | 保存配置到文件 |
+| `load()` | 从文件加载配置 |
+| `add_observer(observer)` | 添加配置观察者 |
+| `remove_observer(observer)` | 移除配置观察者 |
+| `notify_observers(key, value)` | 通知配置变更 |
+
+**代码行数**: ~200行
+
+---
+
+#### 6. error_handler.py - 统一错误处理（v1.3.0新增）
+
+**职责**: 层次化错误类体系
+
+**错误类层级**:
+```
+KingPhotoError (基类)
+├── FormatError         # 格式检测错误
+├── MetadataError       # 元数据读写错误
+├── FileError           # 文件操作错误
+├── RepairError         # 修复错误
+├── PluginError         # 插件错误
+│   ├── PluginLoadError
+│   ├── PluginExecutionError
+│   └── PluginDependencyError
+├── ConfigError         # 配置错误
+└── ExifToolError       # ExifTool错误
+```
+
+**代码行数**: ~100行
+
+---
+
+#### 7. logging_config.py - 日志配置
 
 **职责**: 统一日志配置
 
@@ -491,7 +680,7 @@ King_photo/
 
 ---
 
-#### 6. error_report.py - 错误报告
+#### 8. error_report.py - 错误报告
 
 **职责**: 错误汇总和导出
 
@@ -579,15 +768,21 @@ if __name__ == '__main__':
 ### tests/ 目录
 
 **测试文件**:
-| 文件名 | 测试内容 |
-|--------|----------|
-| `test_format_detector.py` | 格式检测器测试 |
-| `test_metadata_reader.py` | 元数据读取测试 |
-| `test_metadata_writer.py` | 元数据写入测试 |
-| `test_repair_engine.py` | 修复引擎测试 |
-| `test_helpers.py` | 辅助函数测试 |
+| 文件名 | 测试内容 | 测试数 |
+|--------|----------|--------|
+| `api/test_unified_api.py` | KingPhotoAPI全面测试 | 39 |
+| `api/test_plugin_manager.py` | PluginManager测试 | 18 |
+| `plugins/test_format_plugins.py` | 格式插件接口一致性 | 参数化 |
+| `plugins/test_function_plugins.py` | 功能插件接口一致性 | 参数化 |
+| `test_format_detector.py` | 格式检测器测试 | ~20 |
+| `test_metadata_reader.py` | 元数据读取测试 | ~15 |
+| `test_metadata_writer.py` | 元数据写入测试 | ~15 |
+| `test_repair_engine.py` | 修复引擎测试 | ~15 |
+| `test_helpers.py` | 辅助函数测试 | ~10 |
 
-**测试数据**: `tests/test_data/` 目录包含各种格式的测试图片
+**测试配置**: `conftest.py` 提供共享 fixtures（`sample_jpg`, `sample_png`, `tmp_output_dir` 等）
+
+**测试数据**: `test/` 目录包含各种格式的真实图片（jpg/png/jpeg/webp/gif等）
 
 ---
 
@@ -603,6 +798,17 @@ if __name__ == '__main__':
 │       └──────────────┴──────────────┴──────────────┘          │
 │                          │                                    │
 │                    widgets.py                                 │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       API层                                   │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │               unified_api.py (KingPhotoAPI)            │ │
+│  │               plugin_manager.py (PluginManager)        │ │
+│  │               interfaces.py (抽象接口)                  │ │
+│  │               plugin_interfaces.py (插件接口)           │ │
+│  └─────────────────────────────────────────────────────────┘ │
 └──────────────────────────┬───────────────────────────────────┘
                            │
                            ▼
@@ -638,9 +844,10 @@ if __name__ == '__main__':
 ```
 
 **依赖规则**:
-1. **UI层** → 可以导入Core层和Utils层
-2. **Core层** → 只能导入Utils层
-3. **Utils层** → 不能导入Core层或UI层
+1. **UI层** → 只能导入API层和Utils层
+2. **API层** → 可以导入Core层和Utils层
+3. **Core层** → 只能导入Utils层
+4. **Utils层** → 不能导入Core层、API层或UI层
 
 ---
 
@@ -703,39 +910,72 @@ results = RepairEngine.batch_repair(file_list, rename_format='{datetime}')
 results = RepairEngine.batch_repair_extension(file_list)
 ```
 
+### 统一API（推荐使用）
+```python
+# 推荐：通过统一API访问所有功能
+from src.api import KingPhotoAPI, get_api
+
+api = KingPhotoAPI()  # 或 get_api() 全局单例
+
+# 格式检测
+format_info = api.detect_format(filepath)
+is_supported = api.is_supported(filepath)
+
+# 元数据读写
+metadata = api.read_metadata(filepath)
+dt = api.get_datetime(filepath)
+api.write_metadata(filepath, {"title": "test"}, copy_mode=True)
+
+# 修复
+api.repair_file(filepath, fix_extension=True, time_source='auto')
+api.batch_repair(file_list, output_dir=output_dir)
+
+# 插件管理
+api.register_plugin(MyPlugin())
+plugins = api.get_plugins()
+```
+
+### 插件开发
+```python
+from src.api.plugin_interfaces import IFormatPlugin
+
+class MyFormatPlugin(IFormatPlugin):
+    @property
+    def format_name(self): return "MYFMT"
+    @property
+    def extensions(self): return [".myfmt"]
+    @property
+    def magic_numbers(self): return [b"MYFM"]
+    @property
+    def description(self): return "My format plugin"
+    
+    def read_metadata(self, filepath): ...
+    def write_metadata(self, filepath, metadata): ...
+    def get_datetime(self, filepath): ...
+
+# 注册插件
+api = get_api()
+api.register_plugin(MyFormatPlugin())
+```
+
 ### ExifTool封装
 ```python
-# ExifTool单例
 from src.utils.exiftool_wrapper import get_exiftool
-
 et = get_exiftool()
 if et.is_available:
     metadata = et.read_metadata(filepath)
-    success = et.write_metadata(filepath, metadata)
-    dt = et.get_datetime(filepath)
 ```
 
 ### 工具函数
 ```python
-# 辅助函数
 from src.utils.helpers import (
-    extract_time_from_filename,
-    generate_renamed_filename,
-    set_file_times,
-    get_file_times,
-    get_unique_filename,
-    sanitize_filename,
-    format_file_size,
-    format_datetime
+    extract_time_from_filename, set_file_times,
+    get_unique_filename, sanitize_filename,
+    format_file_size, format_datetime
 )
-
-# 配置管理
 from src.utils.config_manager import get_config_manager
-
 config = get_config_manager()
-width = config.get('window.width', 1200)
-config.set('window.width', 1400)
-config.save()
+config.get('window.width', 1200)
 ```
 
 ---
@@ -746,9 +986,11 @@ config.save()
 |------|--------|------------------|
 | core/ | 7 | ~2,700行 |
 | ui/ | 5 | ~3,000行 |
-| utils/ | 6 | ~1,600行 |
-| 入口/测试 | 5 | ~500行 |
-| **总计** | **23** | **~7,800行** |
+| api/ | 4 | ~1,500行 |
+| plugins/ | 8 | ~500行 |
+| utils/ | 8 | ~1,800行 |
+| 入口/测试 | 15 | ~2,000行 |
+| **总计** | **47** | **~11,500行** |
 
 ---
 
@@ -764,21 +1006,26 @@ config.save()
 6. **查看缩略图组件**: `src/ui/widgets.py` → `ThumbnailWidget`
 7. **查看ExifTool集成**: `src/utils/exiftool_wrapper.py`
 8. **查看常量定义**: `src/utils/constants.py`
+9. **查看API接口**: `src/api/unified_api.py` (v1.3.0)
+10. **查看插件接口**: `src/api/plugin_interfaces.py` (v1.3.0)
+11. **查看插件开发文档**: `PLUGIN_DOC.md` (v1.3.0)
 
 ### 添加新功能
 
-1. **添加新格式支持**:
+1. **添加新格式支持（插件方式—推荐）**:
+   - 创建 `plugins/formats/myformat_plugin.py` 实现 `IFormatPlugin`
+   - 通过 `PluginManager` 自动加载
+
+2. **添加新格式支持（传统方式）**:
    - 修改 `constants.py` 添加格式定义
    - 修改 `format_detector.py` 添加检测逻辑
-   - 修改 `metadata_reader.py` 添加读取支持
-   - 修改 `metadata_writer.py` 添加写入支持
 
-2. **添加新UI功能**:
+3. **添加新UI功能**:
    - 修改 `app.py` 添加菜单/工具栏
    - 在 `widgets.py` 中创建新组件
    - 使用 `batch_dialog.py` 模式创建对话框
 
-3. **添加新的元数据字段**:
+4. **添加新的A元数据字段**:
    - 修改 `constants.py` 添加字段定义
    - 修改 `exif_handler.py` 和 `xmp_handler.py` 添加处理
    - 修改 `metadata_writer.py` 添加写入支持

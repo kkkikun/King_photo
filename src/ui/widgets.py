@@ -10,7 +10,7 @@ from typing import Callable, Optional, List, Any
 from PIL import Image, ImageTk
 import os
 
-from ..core.metadata_reader import MetadataReader
+from ..api import get_api
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
@@ -333,6 +333,9 @@ class MetadataEditorWidget(tk.Frame):
         self.on_save = on_save
         self.entries = {}
         self.current_file = None
+        
+        # 初始化统一API
+        self.api = get_api()
 
         # 创建滚动区域
         self.canvas = tk.Canvas(self)
@@ -368,7 +371,7 @@ class MetadataEditorWidget(tk.Frame):
         self.current_file = metadata.get('filepath')
         
         # 获取格式适配的可编辑字段
-        editable_fields = MetadataReader.get_editable_fields(self.current_file)
+        editable_fields = self.api.get_editable_fields(self.current_file)
         
         # 显示格式信息
         format_info = editable_fields.get('_format_info', {})

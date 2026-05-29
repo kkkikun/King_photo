@@ -9,6 +9,7 @@ import shutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Callable
 
+from ..api.interfaces import IFileProcessor
 from .metadata_reader import MetadataReader
 from ..utils.helpers import (
     generate_renamed_filename,
@@ -18,15 +19,121 @@ from ..utils.helpers import (
     get_unique_filename,
     sanitize_filename
 )
-from ..utils.constants import DEFAULT_RENAME_FORMAT
+from ..utils.constants import DEFAULT_RENAME_FORMAT, ALL_EXTENSIONS
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
 
-class FileProcessor:
-    """文件处理器"""
+class FileProcessor(IFileProcessor):
+    """文件处理器，实现IFileProcessor接口"""
 
+    @staticmethod
+    def get_image_files(folder_path: str, recursive: bool = False) -> List[str]:
+        """
+        获取文件夹中的图片文件
+        
+        Args:
+            folder_path: 文件夹路径
+            recursive: 是否递归查找子文件夹
+            
+        Returns:
+            图片文件路径列表
+        """
+        if not os.path.exists(folder_path):
+            return []
+        
+        image_files = []
+        
+        if recursive:
+            for root, dirs, files in os.walk(folder_path):
+                for file in files:
+                    filepath = os.path.join(root, file)
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in ALL_EXTENSIONS:
+                        image_files.append(filepath)
+        else:
+            for file in os.listdir(folder_path):
+                filepath = os.path.join(folder_path, file)
+                if os.path.isfile(filepath):
+                    ext = os.path.splitext(file)[1].lower()
+                    if ext in ALL_EXTENSIONS:
+                        image_files.append(filepath)
+        
+        return sorted(image_files)
+    
+    @staticmethod
+    def process_files(file_list: List[str], operation: str, **kwargs) -> Dict[str, Any]:
+        """
+        批量处理文件
+        
+        Args:
+            file_list: 文件列表
+            operation: 操作类型 ('rename', 'repair', 'export' 等)
+            **kwargs: 操作参数
+            
+        Returns:
+            处理结果字典
+        """
+        results = {
+            'total': len(file_list),
+            'success': 0,
+            'failed': 0,
+            'details': []
+        }
+        
+        for filepath in file_list:
+            try:
+                if operation == 'rename':
+                    result = FileProcessor.rename_file(filepath, **kwargs)
+                elif operation == 'fix_time':
+                    result = FileProcessor.fix_file_time(filepath, **kwargs)
+                else:
+                    result = {'success': False, 'message': f'不支持的操作: {operation}'}
+                
+                if result['success']:
+                    results['success'] += 1
+                else:
+                    results['failed'] += 1
+                
+                results['details'].append({
+                    'file': filepath,
+                    'result': result
+                })
+            except Exception as e:
+                results['failed'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'result': {
+                        'success': False,
+                        'message': f'处理失败: {str(e)}'
+                    }
+                })
+        
+        return results
+    
+    @staticmethod
+    def rename_files(file_list: List[str], pattern: str, 
+                    output_dir: str = None, **kwargs) -> Dict[str, Any]:
+        """
+        批量重命名文件
+        
+        Args:
+            file_list: 文件列表
+            pattern: 重命名模式
+            output_dir: 输出目录
+            **kwargs: 额外参数
+            
+        Returns:
+            重命名结果字典
+        """
+        return FileProcessor.batch_rename(
+            file_list=file_list,
+            rename_format=pattern,
+            output_dir=output_dir,
+            **kwargs
+        )
+    
     @staticmethod
     def rename_file(
         filepath: str,
@@ -280,41 +387,171 @@ class FileProcessor:
         return results
 
     @staticmethod
-    def copy_files(
-        file_list: List[str],
-        output_dir: str,
-        progress_callback: Callable = None
-    ) -> Dict[str, Any]:
+    def copy_files(file_list: List[str], output_dir: str, 
+                  preserve_structure: bool = True) -> Dict[str, Any]:
         """
-        复制文件到指定目录
-
+        批量复制文件
+        
         Args:
             file_list: 文件列表
             output_dir: 输出目录
-            progress_callback: 进度回调
-
+            preserve_structure: 是否保持目录结构
+            
         Returns:
-            操作结果统计
+            复制结果字典
         """
         ensure_output_folder(output_dir)
-
+        
         results = {
             'total': len(file_list),
             'success': 0,
             'failed': 0,
+            'details': []
         }
-
-        for i, filepath in enumerate(file_list):
-            if progress_callback:
-                progress_callback(i + 1, len(file_list), os.path.basename(filepath))
-
+        
+        for filepath in file_list:
             try:
-                dest_path = os.path.join(output_dir, os.path.basename(filepath))
+                if preserve_structure:
+                    # 保持相对路径结构
+                    rel_path = os.path.relpath(filepath, os.path.dirname(file_list[0]) if file_list else filepath)
+                    dest_path = os.path.join(output_dir, rel_path)
+                else:
+                    dest_path = os.path.join(output_dir, os.path.basename(filepath))
+                
+                # 确保目标目录存在
+                dest_dir = os.path.dirname(dest_path)
+                ensure_output_folder(dest_dir)
+                
                 dest_path = get_unique_filename(dest_path)
                 shutil.copy2(filepath, dest_path)
                 results['success'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'dest': dest_path,
+                    'success': True
+                })
             except Exception as e:
                 logger.error(f"复制文件失败: {filepath}, 错误: {str(e)}")
                 results['failed'] += 1
-
+                results['details'].append({
+                    'file': filepath,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        return results
+    
+    @staticmethod
+    def move_files(file_list: List[str], output_dir: str,
+                  preserve_structure: bool = True) -> Dict[str, Any]:
+        """
+        批量移动文件
+        
+        Args:
+            file_list: 文件列表
+            output_dir: 输出目录
+            preserve_structure: 是否保持目录结构
+            
+        Returns:
+            移动结果字典
+        """
+        ensure_output_folder(output_dir)
+        
+        results = {
+            'total': len(file_list),
+            'success': 0,
+            'failed': 0,
+            'details': []
+        }
+        
+        for filepath in file_list:
+            try:
+                if preserve_structure:
+                    # 保持相对路径结构
+                    rel_path = os.path.relpath(filepath, os.path.dirname(file_list[0]) if file_list else filepath)
+                    dest_path = os.path.join(output_dir, rel_path)
+                else:
+                    dest_path = os.path.join(output_dir, os.path.basename(filepath))
+                
+                # 确保目标目录存在
+                dest_dir = os.path.dirname(dest_path)
+                ensure_output_folder(dest_dir)
+                
+                dest_path = get_unique_filename(dest_path)
+                shutil.move(filepath, dest_path)
+                results['success'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'dest': dest_path,
+                    'success': True
+                })
+            except Exception as e:
+                logger.error(f"移动文件失败: {filepath}, 错误: {str(e)}")
+                results['failed'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        return results
+    
+    @staticmethod
+    def delete_files(file_list: List[str], 
+                    backup: bool = False, backup_dir: str = None) -> Dict[str, Any]:
+        """
+        批量删除文件
+        
+        Args:
+            file_list: 文件列表
+            backup: 是否备份
+            backup_dir: 备份目录
+            
+        Returns:
+            删除结果字典
+        """
+        if backup and backup_dir:
+            ensure_output_folder(backup_dir)
+        
+        results = {
+            'total': len(file_list),
+            'success': 0,
+            'failed': 0,
+            'details': []
+        }
+        
+        for filepath in file_list:
+            try:
+                if not os.path.exists(filepath):
+                    results['failed'] += 1
+                    results['details'].append({
+                        'file': filepath,
+                        'success': False,
+                        'error': '文件不存在'
+                    })
+                    continue
+                
+                # 备份文件
+                if backup and backup_dir:
+                    backup_path = os.path.join(backup_dir, os.path.basename(filepath))
+                    backup_path = get_unique_filename(backup_path)
+                    shutil.copy2(filepath, backup_path)
+                
+                # 删除文件
+                os.remove(filepath)
+                results['success'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'success': True,
+                    'backed_up': backup
+                })
+            except Exception as e:
+                logger.error(f"删除文件失败: {filepath}, 错误: {str(e)}")
+                results['failed'] += 1
+                results['details'].append({
+                    'file': filepath,
+                    'success': False,
+                    'error': str(e)
+                })
+        
         return results

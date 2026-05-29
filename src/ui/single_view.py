@@ -8,9 +8,7 @@ from tkinter import ttk, messagebox
 from typing import Optional
 
 from .widgets import ImagePreviewWidget, MetadataEditorWidget
-from ..core.metadata_reader import MetadataReader
-from ..core.metadata_writer import MetadataWriter
-from ..core.repair_engine import RepairEngine
+from ..api import get_api
 from ..utils.helpers import format_file_size, format_datetime
 
 
@@ -22,6 +20,9 @@ class SingleView(ttk.Frame):
 
         self.app = app
         self.current_file = None
+        
+        # 初始化统一API
+        self.api = get_api()
 
         self._create_ui()
 
@@ -91,7 +92,7 @@ class SingleView(ttk.Frame):
         self.preview.load_image(filepath)
 
         # 加载元信息
-        metadata = MetadataReader.read_metadata(filepath)
+        metadata = self.api.read_metadata(filepath)
         self.editor.load_metadata(metadata)
 
         # 显示状态
@@ -138,7 +139,7 @@ class SingleView(ttk.Frame):
             return
 
         # 执行保存
-        result = MetadataWriter.write_metadata(
+        result = self.api.write_metadata(
             self.current_file,
             metadata,
             copy_mode=copy_mode,
@@ -169,7 +170,7 @@ class SingleView(ttk.Frame):
         if not messagebox.askyesno("确认", "将执行完整修复（后缀修复 + 时间修复）\n\n请在操作前备份重要数据\n确定继续吗？"):
             return
 
-        result = RepairEngine.repair(
+        result = self.api.repair_file(
             original_path,
             output_dir=output_dir,
             fix_extension=True,

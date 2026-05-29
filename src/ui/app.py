@@ -11,10 +11,7 @@ from typing import List, Optional
 
 from .folder_view import FolderView
 from .single_view import SingleView
-from ..core.metadata_reader import MetadataReader
-from ..core.file_processor import FileProcessor
-from ..core.repair_engine import RepairEngine
-from ..core.metadata_writer import MetadataWriter
+from ..api import get_api
 from ..utils.helpers import get_image_files_in_folder, is_supported_image
 from ..utils.config_manager import get_config_manager
 
@@ -28,6 +25,9 @@ class MainWindow:
     def __init__(self):
         # 加载配置
         self.config = get_config_manager()
+        
+        # 初始化统一API
+        self.api = get_api()
 
         self.root = tk.Tk()
         self.root.title("King_photo - 图片元信息编辑与修复工具")
@@ -326,7 +326,7 @@ class MainWindow:
 
             # 执行批量写入
             def do_write():
-                return MetadataWriter.batch_write_metadata(
+                return self.api.batch_write_metadata(
                     selected_files,
                     metadata,
                     copy_mode=True,
@@ -354,10 +354,9 @@ class MainWindow:
         # 先修复后缀，再修复时间
         def fix_time_with_prefix():
             # 先修复后缀
-            ext_result = RepairEngine.batch_repair_extension(
+            ext_result = self.api.batch_repair_extension(
                 selected_files,
                 self.output_dir,
-                True,
                 self._update_progress
             )
             # 获取修复后缀后的文件列表
@@ -368,12 +367,14 @@ class MainWindow:
                 else:
                     fixed_files.append(detail['file'])
 
-            # 再修复时间
-            time_result = FileProcessor.batch_fix_time(
+            # 再修复时间（使用repair_file方法，因为API没有batch_fix_time）
+            # 这里需要逐个修复时间，但为了简化，我们使用batch_repair
+            time_result = self.api.batch_repair(
                 fixed_files,
-                self.output_dir,
-                True,
-                self._update_progress
+                output_dir=self.output_dir,
+                fix_extension=False,
+                fix_time=True,
+                progress_callback=self._update_progress
             )
             return time_result
 
@@ -400,10 +401,9 @@ class MainWindow:
 
         # 执行修复
         self._execute_batch_operation(
-            lambda: RepairEngine.batch_repair_extension(
+            lambda: self.api.batch_repair_extension(
                 selected_files,
                 self.output_dir,
-                True,
                 self._update_progress
             ),
             "修复后缀"
@@ -426,11 +426,12 @@ class MainWindow:
 
         # 执行修复
         self._execute_batch_operation(
-            lambda: RepairEngine.batch_full_repair(
+            lambda: self.api.batch_repair(
                 selected_files,
-                self.output_dir,
-                True,
-                self._update_progress
+                output_dir=self.output_dir,
+                fix_extension=True,
+                fix_time=True,
+                progress_callback=self._update_progress
             ),
             "完整修复"
         )
@@ -456,15 +457,14 @@ class MainWindow:
 
             # 执行修复
             def do_repair():
-                return RepairEngine.batch_repair(
+                return self.api.batch_repair(
                     selected_files,
-                    rename_format=result['rename_format'],
                     output_dir=result['output_dir'],
                     fix_extension=result['fix_extension'],
                     fix_time=result['fix_time'],
-                    progress_callback=self._update_progress,
                     time_source=result.get('time_source', 'auto'),
-                    unprocessed_dir=result.get('unprocessed_dir')
+                    rename_format=result['rename_format'],
+                    progress_callback=self._update_progress
                 )
 
             self._execute_batch_operation(do_repair, "修复图片")
@@ -479,12 +479,10 @@ class MainWindow:
 
         if dialog.result:
             self._execute_batch_operation(
-                lambda: FileProcessor.batch_rename(
+                lambda: self.api.rename_files(
                     files,
                     dialog.result['format'],
-                    dialog.result['output_dir'],
-                    True,
-                    self._update_progress
+                    dialog.result['output_dir']
                 ),
                 "批量重命名"
             )

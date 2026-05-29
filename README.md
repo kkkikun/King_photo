@@ -151,6 +151,40 @@ python build.py
 - exiftool (特殊格式支持)
 - PyInstaller (打包)
 
+## API 使用
+
+King_photo 提供统一的 Python API，可编程调用所有核心功能：
+
+```python
+from src.api import KingPhotoAPI
+
+api = KingPhotoAPI()
+
+# 检测格式
+format_info = api.detect_format("photo.jpg")
+
+# 读取元数据
+metadata = api.read_metadata("photo.jpg")
+dt = api.get_datetime("photo.jpg")  # 拍摄时间
+
+# 写入元数据
+api.write_metadata("photo.jpg", {"title": "我的照片", "author": "张三"})
+
+# 修复文件
+result = api.repair_file("photo.jpg", 
+    fix_extension=True, fix_time=True, time_source="auto")
+
+# 批量修复
+api.batch_repair(["a.jpg", "b.png"], output_dir="repaired",
+    progress_callback=lambda cur, total: print(f"{cur}/{total}"))
+
+# 插件管理
+api.register_plugin(MyFormatPlugin())
+plugins = api.get_plugins()
+```
+
+详细示例参见 `api_example.py`。
+
 ## 项目结构
 
 ```
@@ -158,6 +192,12 @@ King_photo/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py              # 程序入口
+│   ├── api/                   # 统一API层（v1.3.0 新增）
+│   │   ├── __init__.py
+│   │   ├── interfaces.py      # 核心接口定义（ABC）
+│   │   ├── plugin_interfaces.py # 插件接口定义
+│   │   ├── unified_api.py     # KingPhotoAPI 统一入口
+│   │   └── plugin_manager.py  # 插件管理器
 │   ├── ui/
 │   │   ├── __init__.py
 │   │   ├── app.py           # 主应用窗口
@@ -179,14 +219,23 @@ King_photo/
 │       ├── constants.py        # 常量定义
 │       ├── helpers.py          # 工具函数
 │       ├── config_manager.py   # 配置管理
+│       ├── config_center.py    # 统一配置中心
+│       ├── error_handler.py    # 统一错误处理
 │       ├── logging_config.py   # 日志配置
 │       ├── error_report.py     # 错误报告
 │       └── exiftool_wrapper.py # exiftool封装
+├── plugins/                  # 插件目录（v1.3.0 新增）
+│   ├── formats/              # 格式插件（PNG、HEIC、WebP）
+│   ├── functions/            # 功能插件（批量重命名、批量修复）
+│   ├── extensions/           # 扩展插件（水印等）
+│   └── plugin_config.json    # 插件配置
 ├── tests/                   # 测试代码
 ├── config/                  # 配置文件
 ├── requirements.txt         # 依赖
+├── api_example.py           # API使用示例
 ├── build.py                 # 打包脚本
 ├── run.py                   # 启动脚本
+├── PLUGIN_DOC.md            # 插件开发文档
 ├── DEVELOPMENT_RULES.md     # 开发规范
 ├── PROJECT_STRUCTURE.md     # 项目结构说明
 ├── .gitignore
@@ -206,6 +255,21 @@ King_photo/
 4. **文件后缀修复**：通过读取文件头魔数检测真实格式，可能不是100%准确
 
 ## 更新日志
+
+### v1.3.0 (2026-05-30)
+
+#### New Features
+- **统一API层**：`KingPhotoAPI` 类提供所有核心功能的编程接口，支持格式检测、元数据读写、文件修复、批量操作、插件管理
+- **插件系统**：支持格式插件、功能插件、扩展插件三种类型，通过 `PluginManager` 动态加载和注册，无需修改核心代码
+- **接口定义**：使用 Python ABC 定义 `IFormatDetector`、`IMetadataReader`、`IMetadataWriter`、`IRepairEngine`、`IFileProcessor` 等核心接口
+- **配置中心**：`ConfigCenter` 统一配置管理，支持观察者模式和配置验证
+- **错误处理体系**：层次化错误类（`KingPhotoError`、`FormatError`、`MetadataError`、`PluginError` 等）
+
+#### Improvements
+- **模块化重构**：核心模块实现对应接口，确保接口一致性
+- **动态格式注册**：`FormatDetector` 支持 `register_format()` 动态添加新格式
+- **插件示例**：提供 PNG、HEIC、WebP 格式插件和批量重命名、批量修复功能插件
+- **插件文档**：`PLUGIN_DOC.md` 包含完整的插件开发指南
 
 ### v1.2.0 (2026-05-30)
 

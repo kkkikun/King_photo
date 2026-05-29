@@ -8,7 +8,7 @@ from tkinter import ttk, filedialog, messagebox
 from typing import List, Optional
 
 from ..utils.constants import RENAME_VARIABLES, DEFAULT_RENAME_FORMAT
-from ..core.metadata_reader import MetadataReader
+from ..api import get_api
 
 
 class RenameDialog(tk.Toplevel):
@@ -470,6 +470,9 @@ class BatchMetadataDialog(tk.Toplevel):
 
         self.files = files
         self.result = None
+        
+        # 初始化统一API
+        self.api = get_api()
 
         # 居中显示
         screen_width = self.winfo_screenwidth()
@@ -522,7 +525,7 @@ class BatchMetadataDialog(tk.Toplevel):
         if self.files:
             # 获取第一个文件的格式信息
             first_file = self.files[0]
-            editable_fields = MetadataReader.get_editable_fields(first_file)
+            editable_fields = self.api.get_editable_fields(first_file)
             format_info = editable_fields.get('_format_info', {})
             
             # 显示格式信息

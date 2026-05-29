@@ -22,6 +22,7 @@ from ..utils.helpers import (
     generate_renamed_filename,
     sanitize_filename
 )
+from ..api.interfaces import IRepairEngine
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 
-class RepairEngine:
-    """修复引擎"""
+class RepairEngine(IRepairEngine):
+    """修复引擎，实现IRepairEngine接口"""
 
     @staticmethod
     def check_file_extension(filepath: str) -> Dict[str, Any]:
@@ -211,11 +212,11 @@ class RepairEngine:
     @staticmethod
     def repair(
         filepath: str,
-        rename_format: str = '{datetime}',
         output_dir: str = None,
         fix_extension: bool = True,
         fix_time: bool = True,
         time_source: str = 'auto',
+        rename_format: str = '{datetime}',
         unprocessed_dir: str = None
     ) -> Dict[str, Any]:
         """
@@ -223,11 +224,11 @@ class RepairEngine:
 
         Args:
             filepath: 源文件路径
-            rename_format: 重命名格式
             output_dir: 输出目录
             fix_extension: 是否修复后缀
             fix_time: 是否修复时间
             time_source: 时间来源 ('auto', 'metadata', 'modified', 'created', 'custom')
+            rename_format: 重命名格式
             unprocessed_dir: 未处理文件输出目录
 
         Returns:
@@ -546,12 +547,12 @@ class RepairEngine:
     @staticmethod
     def batch_repair(
         file_list: List[str],
-        rename_format: str = '{datetime}',
         output_dir: str = None,
         fix_extension: bool = True,
         fix_time: bool = True,
-        progress_callback: Callable = None,
         time_source: str = 'auto',
+        rename_format: str = '{datetime}',
+        progress_callback: Callable = None,
         unprocessed_dir: str = None
     ) -> Dict[str, Any]:
         """
@@ -559,12 +560,12 @@ class RepairEngine:
 
         Args:
             file_list: 文件列表
-            rename_format: 重命名格式
             output_dir: 输出目录
             fix_extension: 是否修复后缀
             fix_time: 是否修复时间
-            progress_callback: 进度回调
             time_source: 时间来源
+            rename_format: 重命名格式
+            progress_callback: 进度回调
             unprocessed_dir: 未处理文件输出目录
 
         Returns:
@@ -624,7 +625,6 @@ class RepairEngine:
     def batch_repair_extension(
         file_list: List[str],
         output_dir: str = None,
-        auto_fix: bool = True,
         progress_callback: Callable = None
     ) -> Dict[str, Any]:
         """
@@ -633,7 +633,6 @@ class RepairEngine:
         Args:
             file_list: 文件列表
             output_dir: 输出目录
-            auto_fix: 是否自动修复
             progress_callback: 进度回调
 
         Returns:

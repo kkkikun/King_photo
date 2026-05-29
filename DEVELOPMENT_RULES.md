@@ -8,11 +8,13 @@
 4. [文件操作规则](#文件操作规则)
 5. [UI开发规则](#ui开发规则)
 6. [元数据处理规则](#元数据处理规则)
-7. [测试规则](#测试规则)
-8. [依赖管理规则](#依赖管理规则)
-9. [性能优化规则](#性能优化规则)
-10. [安全规则](#安全规则)
-11. [项目结构查询规则](#项目结构查询规则)
+7. [API开发规则](#api开发规则)
+8. [插件开发规则](#插件开发规则)
+9. [测试规则](#测试规则)
+10. [依赖管理规则](#依赖管理规则)
+11. [性能优化规则](#性能优化规则)
+12. [安全规则](#安全规则)
+13. [项目结构查询规则](#项目结构查询规则)
 
 ---
 
@@ -20,20 +22,27 @@
 
 ### 1.1 模块职责分离
 
-项目采用三层架构，严格遵守职责分离原则：
+项目采用四层架构 + 插件系统，严格遵守职责分离原则：
 
 ```
 src/
-├── core/      # 核心业务逻辑（无UI依赖）
-├── ui/        # 用户界面（不包含业务逻辑）
-└── utils/     # 通用工具函数（无业务逻辑）
+├── api/        # 统一API层（接口定义、插件管理）
+├── core/       # 核心业务逻辑（实现API接口，无UI依赖）
+├── ui/         # 用户界面（通过API访问，不直接依赖core）
+└── utils/      # 通用工具函数（无业务逻辑）
+
+plugins/        # 插件目录（独立于src，动态加载）
+├── formats/    # 格式插件
+├── functions/  # 功能插件
+└── extensions/ # 扩展插件
 ```
 
 **规则：**
-- `core/` 模块不得导入 `ui/` 模块的任何内容
-- `ui/` 模块可以导入 `core/` 和 `utils/` 模块
-- `utils/` 模块不得导入 `core/` 或 `ui/` 模块
-- `core/` 模块之间的依赖应通过接口而非具体实现
+- `api/` → 定义抽象接口（ABC），不包含具体实现
+- `core/` → 实现 `api/interfaces.py` 中的接口，不得导入 `ui/` 模块
+- `ui/` → 通过 `get_api()` 访问功能，不直接导入 `core/`
+- `utils/` → 不得导入 `core/`、`api/` 或 `ui/` 模块
+- `plugins/` → 实现 `api/plugin_interfaces.py` 中的接口，可导入 `core/` 和 `utils/`
 
 ### 1.2 单一职责原则
 
@@ -41,29 +50,39 @@ src/
 
 | 模块 | 职责 |
 |------|------|
-| `format_detector.py` | 文件格式检测，不处理文件内容 |
-| `metadata_reader.py` | 元数据读取，不修改文件 |
-| `metadata_writer.py` | 元数据写入，不读取元数据 |
-| `repair_engine.py` | 修复流程编排，调用其他模块 |
+| `api/interfaces.py` | 核心接口定义（ABC），不包含实现 |
+| `api/plugin_interfaces.py` | 插件接口定义，三种插件类型 |
+| `api/unified_api.py` | KingPhotoAPI 统一入口，路由到core模块 |
+| `api/plugin_manager.py` | 插件加载、注册、管理生命周期 |
+| `format_detector.py` | 文件格式检测，实现 IFormatDetector |
+| `metadata_reader.py` | 元数据读取，实现 IMetadataReader |
+| `metadata_writer.py` | 元数据写入，实现 IMetadataWriter |
+| `repair_engine.py` | 修复流程编排，实现 IRepairEngine |
+| `file_processor.py` | 文件操作，实现 IFileProcessor |
 | `exif_handler.py` | EXIF格式处理 |
 | `xmp_handler.py` | XMP格式处理 |
 | `exiftool_wrapper.py` | ExifTool命令行封装 |
+| `config_center.py` | 统一配置管理，观察者模式 |
+| `error_handler.py` | 层次化错误类体系 |
 
 ### 1.3 依赖注入模式
 
-使用依赖注入降低模块间耦合：
+使用依赖注入降低模块间耦合。**推荐：通过统一API访问功能**。
 
 ```python
-# 好的做法：通过参数传入依赖
+# 推荐：通过统一API（推荐方式）
+from src.api import get_api
+api = get_api()
+metadata = api.read_metadata(filepath)
+
+# 可接受：通过参数传入依赖
 def repair_file(filepath, format_detector, metadata_reader, metadata_writer):
     format_info = format_detector.get_format_info(filepath)
     metadata = metadata_reader.read_metadata(filepath)
-    # ...
 
-# 不好的做法：直接实例化依赖
+# 不推荐：直接实例化依赖
 def repair_file(filepath):
     detector = FormatDetector()
-    reader = MetadataReader()
     # ...
 ```
 
@@ -638,27 +657,147 @@ def get_best_time(filepath: str, time_source: str = 'auto') -> Optional[datetime
 
 ---
 
+## API开发规则（v1.3.0新增）
+
+### 7.1 统一入口原则
+
+**规则：** UI层和外部调用应通过 `KingPhotoAPI` 统一入口访问核心功能。
+
+```python
+# 推荐：通过统一API
+from src.api import get_api
+api = get_api()
+metadata = api.read_metadata(filepath)
+result = api.repair_file(filepath, fix_extension=True)
+
+# 不推荐：直接调用core模块（UI层应避免）
+from src.core.metadata_reader import MetadataReader
+from src.core.repair_engine import RepairEngine
+metadata = MetadataReader.read_metadata(filepath)
+```
+
+### 7.2 接口实现规则
+
+**规则：** `core/` 模块应实现 `api/interfaces.py` 中定义的对应抽象接口。
+
+```python
+from src.api.interfaces import IFormatDetector
+
+# 正确的做法
+class FormatDetector(IFormatDetector):
+    def detect_by_header(self, filepath: str) -> Optional[str]:
+        # 具体实现...
+
+# 接口签名必须匹配
+```
+
+### 7.3 延迟初始化
+
+**规则：** `KingPhotoAPI` 使用延迟初始化模式，避免不必要的资源消耗。
+
+```python
+class KingPhotoAPI:
+    def __init__(self):
+        self._format_detector = None  # 延迟创建
+    
+    def _ensure_initialized(self):
+        """首次调用时初始化核心模块"""
+        if self._format_detector is None:
+            self._init_core_modules()
+```
+
+### 7.4 API方法返回值
+
+**规则：** API方法返回类型应一致。读取操作返回数据，写入/修复操作返回结果字典。
+
+```python
+# 读取操作：返回数据
+def read_metadata(self, filepath) -> Dict[str, Any]: ...
+def get_datetime(self, filepath) -> Optional[datetime]: ...
+
+# 写入/修复操作：返回结果字典
+def repair_file(self, filepath, ...) -> Dict[str, Any]: ...
+def batch_repair(self, file_list, ...) -> Dict[str, Any]: ...
+```
+
+---
+
+## 插件开发规则（v1.3.0新增）
+
+### 8.1 插件类型选择
+
+| 需求 | 使用的插件类型 |
+|------|---------------|
+| 添加新文件格式支持 | `IFormatPlugin` |
+| 添加新功能（如批量导出） | `IFunctionPlugin` |
+| 增强现有功能（如添加水印） | `IExtensionPlugin` |
+
+### 8.2 插件实现规则
+
+**规则：** 插件必须实现对应接口的全部抽象方法。
+
+```python
+from src.api.plugin_interfaces import IFormatPlugin
+
+class MyFormatPlugin(IFormatPlugin):
+    # 必须实现的属性
+    format_name: str
+    extensions: List[str]
+    magic_numbers: List[bytes]
+    description: str
+    
+    # 必须实现的方法
+    def read_metadata(self, filepath: str) -> Dict[str, Any]: ...
+    def write_metadata(self, filepath: str, metadata: Dict[str, Any]) -> bool: ...
+    def get_datetime(self, filepath: str) -> Optional[datetime]: ...
+```
+
+### 8.3 插件目录规范
+
+```python
+plugins/
+├── formats/          # 格式插件：文件名 = <format>_plugin.py
+├── functions/        # 功能插件：文件名 = <function>_plugin.py
+├── extensions/       # 扩展插件：文件名 = <extension>_plugin.py
+└── plugin_config.json # 插件配置：启用/禁用状态
+```
+
+### 8.4 插件注册
+
+**规则：** 插件可通过 PluginManager 自动加载或手动注册。
+
+```python
+# 自动加载：将插件放入 plugins/ 目录即可
+# 手动注册：
+from src.api import get_api
+api = get_api()
+api.register_plugin(MyFormatPlugin())
+```
+
+---
+
 ## 测试规则
 
-### 7.1 测试组织
+### 9.1 测试组织
 
 **规则：** 测试文件与源文件结构对应。
 
 ```
 tests/
-├── __init__.py
+├── api/                   # API层测试（v1.3.0）
+│   ├── test_unified_api.py
+│   └── test_plugin_manager.py
+├── plugins/               # 插件测试（v1.3.0）
+│   ├── test_format_plugins.py
+│   └── test_function_plugins.py
 ├── test_format_detector.py
 ├── test_metadata_reader.py
 ├── test_metadata_writer.py
 ├── test_repair_engine.py
-├── test_helpers.py
-└── test_data/           # 测试数据
-    ├── sample.jpg
-    ├── sample.png
-    └── corrupted.jpg
+└── test_helpers.py
 ```
 
-### 7.2 测试命名规范
+### 9.2 测试命名规范
 
 **规则：** 测试函数名应清晰描述测试内容。
 
@@ -683,14 +822,16 @@ class TestFormatDetector:
         pass
 ```
 
-### 7.3 测试覆盖率要求
+### 9.3 测试覆盖率要求
 
 **规则：**
 - 核心模块（`core/`）测试覆盖率应达到80%以上
+- API层（`api/`）测试覆盖率应达到85%以上（v1.3.0）
 - 关键函数（格式检测、元数据读写）测试覆盖率应达到90%以上
+- 插件接口测试应覆盖所有已注册插件（v1.3.0）
 - 边界情况和异常处理必须有测试
 
-### 7.4 测试数据管理
+### 9.4 测试数据管理
 
 **规则：** 使用真实图片文件进行测试，确保测试的准确性。
 
@@ -724,7 +865,7 @@ def test_read_jpeg_metadata(sample_jpeg):
 
 ## 依赖管理规则
 
-### 8.1 依赖版本固定
+### 10.1 依赖版本固定
 
 **规则：** 使用固定版本号，避免兼容性问题。
 
@@ -736,54 +877,7 @@ lxml>=4.9.0
 ttkbootstrap>=1.10.0
 ```
 
-### 8.2 外部工具集成
-
-**规则：** 外部工具必须有可用性检查和优雅降级。
-
-```python
-class ExifToolWrapper:
-    """ExifTool命令行工具封装"""
-    
-    def __init__(self):
-        self.exiftool_path = self._find_exiftool()
-        self._available = self.exiftool_path is not None
-    
-    @property
-    def is_available(self) -> bool:
-        """检查exiftool是否可用"""
-        return self._available
-    
-    def _find_exiftool(self) -> Optional[str]:
-        """查找exiftool可执行文件"""
-        # 1. 检查系统PATH
-        exiftool = shutil.which('exiftool')
-        if exiftool:
-            return exiftool
-        
-        # 2. 检查常见安装位置
-        common_paths = [
-            r'C:\Program Files\exiftool\exiftool.exe',
-            r'C:\Program Files (x86)\exiftool\exiftool.exe',
-        ]
-        
-        for path in common_paths:
-            if os.path.exists(path):
-                return path
-        
-        return None
-
-def process_with_exiftool(filepath, metadata):
-    """使用exiftool处理，带可用性检查"""
-    et = get_exiftool()
-    
-    if not et.is_available:
-        logger.warning("ExifTool不可用，跳过处理")
-        return {'success': False, 'message': 'ExifTool不可用'}
-    
-    return et.write_metadata(filepath, metadata)
-```
-
-### 8.3 可选依赖处理
+### 10.2 外部工具集成
 
 **规则：** 可选依赖必须有导入检查和功能降级。
 
@@ -811,7 +905,7 @@ def open_image(filepath):
 
 ## 性能优化规则
 
-### 9.1 异步加载
+### 11.1 异步加载
 
 **规则：** 耗时操作必须异步执行，避免阻塞UI。
 
@@ -843,7 +937,7 @@ class ThumbnailWidget:
         thread.start()
 ```
 
-### 9.2 缓存机制
+### 11.2 缓存机制
 
 **规则：** 对频繁访问的数据实现缓存。
 
@@ -865,7 +959,7 @@ class FormatDetector:
             return None
 ```
 
-### 9.3 批量处理优化
+### 11.3 批量处理优化
 
 **规则：** 批量操作应提供进度反馈和优化处理。
 
@@ -894,7 +988,7 @@ def batch_process(file_list, process_func, progress_callback=None):
 
 ## 安全规则
 
-### 10.1 输入验证
+### 12.1 输入验证
 
 **规则：** 所有用户输入必须验证。
 
@@ -918,7 +1012,7 @@ def validate_rename_format(format_string: str) -> Tuple[bool, str]:
     return True, "格式有效"
 ```
 
-### 10.2 路径安全
+### 12.2 路径安全
 
 **规则：** 防止路径遍历攻击。
 
@@ -936,7 +1030,7 @@ def safe_path_join(base_path, relative_path):
     return abs_path
 ```
 
-### 10.3 文件操作安全
+### 12.3 文件操作安全
 
 **规则：** 文件操作前必须验证权限和状态。
 
@@ -967,7 +1061,7 @@ def safe_file_operation(filepath, operation):
 
 ## 项目结构查询规则
 
-### 11.1 项目结构说明书优先查询
+### 13.1 项目结构说明书优先查询
 
 **规则：** 在开始任何开发任务前，必须首先查询项目结构说明书。
 
@@ -984,7 +1078,7 @@ def safe_file_operation(filepath, operation):
 - 理解模块间依赖关系
 - 避免重复造轮子
 
-### 11.2 结构说明书内容
+### 13.2 结构说明书内容
 
 项目结构说明书包含以下信息：
 
@@ -999,22 +1093,24 @@ def safe_file_operation(filepath, operation):
 | 关键类和函数速查 | 常用代码片段和示例 |
 | 代码统计 | 各模块代码行数统计 |
 
-### 11.3 快速定位指南
+### 13.3 快速定位指南
 
 根据开发任务类型，快速定位到相关模块：
 
 | 任务类型 | 相关模块 | 说明书章节 |
 |----------|----------|------------|
-| 添加新格式支持 | `format_detector.py`, `constants.py` | core/ 目录 |
+| 添加新格式支持（插件方式） | `plugins/formats/`, `plugin_interfaces.py` | api/ + plugins/ 目录 |
+| 添加新格式支持（传统方式） | `format_detector.py`, `constants.py` | core/ 目录 |
 | 修改元数据处理 | `metadata_reader.py`, `metadata_writer.py` | core/ 目录 |
 | 修复文件功能 | `repair_engine.py` | core/ 目录 |
+| API接口开发 | `unified_api.py`, `interfaces.py` | api/ 目录 |
+| 插件系统开发 | `plugin_manager.py`, `plugin_interfaces.py` | api/ 目录 |
 | UI界面修改 | `app.py`, `widgets.py`, `batch_dialog.py` | ui/ 目录 |
 | ExifTool集成 | `exiftool_wrapper.py` | utils/ 目录 |
-| 配置管理 | `config_manager.py` | utils/ 目录 |
+| 配置管理 | `config_manager.py`, `config_center.py` | utils/ 目录 |
 | 日志系统 | `logging_config.py` | utils/ 目录 |
-| 添加新功能 | 参考"添加新功能"章节 | 附录 |
 
-### 11.4 更新说明书规则
+### 13.4 更新说明书规则
 
 **规则：** 当项目结构发生重大变化时，必须更新项目结构说明书。
 
@@ -1030,7 +1126,7 @@ def safe_file_operation(filepath, operation):
 3. 更新依赖关系图（如有变化）
 4. 更新代码统计信息
 
-### 11.5 使用示例
+### 13.5 使用示例
 
 **场景：需要添加新的图片格式支持**
 

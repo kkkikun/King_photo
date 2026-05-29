@@ -9,7 +9,7 @@ from tkinter import ttk, messagebox
 from typing import List, Optional, Dict
 
 from .widgets import ThumbnailWidget, ImagePreviewWidget, MetadataEditorWidget
-from ..core.metadata_reader import MetadataReader
+from ..api import get_api
 from ..utils.helpers import format_file_size, format_datetime
 
 # 异步加载阈值：文件数量超过此值时使用异步加载
@@ -27,6 +27,9 @@ class FolderView(ttk.Frame):
         self.files = []
         self.thumbnails = []
         self.selected_files = set()
+        
+        # 初始化统一API
+        self.api = get_api()
 
         self._create_ui()
 
@@ -148,7 +151,7 @@ class FolderView(ttk.Frame):
 
     def _show_image_info(self, filepath: str):
         """显示图片信息"""
-        metadata = MetadataReader.get_summary(filepath)
+        metadata = self.api.get_metadata_summary(filepath)
 
         self.info_text.delete(1.0, tk.END)
 

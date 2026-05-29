@@ -5,15 +5,19 @@ King_photo - 格式检测模块
 
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from ..utils.constants import FILE_SIGNATURES, SUPPORTED_FORMATS
+from ..api.interfaces import IFormatDetector
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
 
-class FormatDetector:
-    """文件格式检测器"""
+class FormatDetector(IFormatDetector):
+    """文件格式检测器，实现IFormatDetector接口"""
+    
+    # 动态注册的格式配置
+    _custom_formats: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
     def detect_by_header(filepath: str) -> Optional[str]:
@@ -228,14 +232,24 @@ class FormatDetector:
     def get_format_info(filepath: str) -> dict:
         """获取格式详细信息"""
         format_name, is_consistent = FormatDetector.get_real_format(filepath)
+        
+        # 获取扩展名
+        ext = os.path.splitext(filepath)[1].lower()
+        
+        # 检查是否为图片或视频
+        is_image, _ = FormatDetector.is_truly_image(filepath)
+        is_video, _ = FormatDetector.is_video_file(filepath)
 
         if format_name is None:
             return {
                 'format': 'Unknown',
-                'supports_exif': False,
-                'supports_xmp': False,
-                'needs_exiftool': False,
-                'is_consistent': True,
+                'extension': ext,
+                'is_image': is_image,
+                'is_video': is_video,
+                'exif_support': False,
+                'xmp_support': False,
+                'need_exiftool': False,
+                'is_consistent': is_consistent,
             }
 
         supports_exif = False
@@ -244,11 +258,94 @@ class FormatDetector:
 
         if format_name in SUPPORTED_FORMATS:
             _, supports_exif, supports_xmp, needs_exiftool = SUPPORTED_FORMATS[format_name]
+        elif format_name in FormatDetector._custom_formats:
+            # 使用自定义格式配置
+            config = FormatDetector._custom_formats[format_name]
+            supports_exif = config.get('exif_support', False)
+            supports_xmp = config.get('xmp_support', False)
+            needs_exiftool = config.get('need_exiftool', False)
 
         return {
             'format': format_name,
-            'supports_exif': supports_exif,
-            'supports_xmp': supports_xmp,
-            'needs_exiftool': needs_exiftool,
+            'extension': ext,
+            'is_image': is_image,
+            'is_video': is_video,
+            'exif_support': supports_exif,
+            'xmp_support': supports_xmp,
+            'need_exiftool': needs_exiftool,
             'is_consistent': is_consistent,
         }
+    
+    @staticmethod
+    def register_format(format_name: str, format_config: Dict[str, Any]) -> None:
+        """
+        注册新格式（插件机制）
+        
+        Args:
+            format_name: 格式名称
+            format_config: 格式配置，包含：
+                - extensions: 扩展名列表
+                - magic_numbers: 文件头魔数列表
+                - exif_support: 是否支持EXIF
+                - xmp_support: 是否支持XMP
+                - need_exiftool: 是否需要ExifTool
+        """
+        # 验证配置格式
+        required_keys = ['extensions', 'exif_support', 'xmp_support', 'need_exiftool']
+        for key in required_keys:
+            if key not in format_config:
+                raise ValueError(f"格式配置缺少必要字段: {key}")
+        
+        # 存储格式配置
+        FormatDetector._custom_formats[format_name] = format_config
+        
+        # 更新常量中的SUPPORTED_FORMATS
+        from ..utils.constants import SUPPORTED_FORMATS, FILE_SIGNATURES, ALL_EXTENSIONS
+        
+        # 添加到SUPPORTED_FORMATS
+        extensions = format_config['extensions']
+        exif_support = format_config['exif_support']
+        xmp_support = format_config['xmp_support']
+        need_exiftool = format_config['need_exiftool']
+        
+        SUPPORTED_FORMATS[format_name] = (extensions, exif_support, xmp_support, need_exiftool)
+        
+        # 添加到ALL_EXTENSIONS
+        ALL_EXTENSIONS.extend(extensions)
+        
+        # 如果提供了魔数，添加到FILE_SIGNATURES
+        if 'magic_numbers' in format_config:
+            FILE_SIGNATURES[format_name] = format_config['magic_numbers']
+        
+        logger.info(f"已注册新格式: {format_name}")
+    
+    @staticmethod
+    def get_supported_formats() -> Dict[str, Dict[str, Any]]:
+        """
+        获取所有支持的格式
+        
+        Returns:
+            格式字典，键为格式名称，值为格式配置
+        """
+        from ..utils.constants import SUPPORTED_FORMATS
+        
+        formats = {}
+        
+        # 添加内置格式
+        for format_name, (extensions, exif_support, xmp_support, need_exiftool) in SUPPORTED_FORMATS.items():
+            formats[format_name] = {
+                'extensions': extensions,
+                'exif_support': exif_support,
+                'xmp_support': xmp_support,
+                'need_exiftool': need_exiftool,
+                'is_custom': False
+            }
+        
+        # 添加自定义格式
+        for format_name, config in FormatDetector._custom_formats.items():
+            formats[format_name] = {
+                **config,
+                'is_custom': True
+            }
+        
+        return formats

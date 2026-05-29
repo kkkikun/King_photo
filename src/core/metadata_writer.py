@@ -14,13 +14,14 @@ from .exif_handler import ExifHandler
 from .xmp_handler import XmpHandler
 from ..utils.exiftool_wrapper import get_exiftool
 from ..utils.helpers import get_file_extension, get_unique_filename
+from ..api.interfaces import IMetadataWriter
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
 
-class MetadataWriter:
-    """元信息写入引擎"""
+class MetadataWriter(IMetadataWriter):
+    """元信息写入引擎，实现IMetadataWriter接口"""
 
     @staticmethod
     def write_metadata(filepath: str, metadata: Dict[str, Any], copy_mode: bool = True, output_dir: str = None) -> Dict[str, Any]:
@@ -86,14 +87,14 @@ class MetadataWriter:
             if not success:
                 logger.warning(f"exiftool写入PNG失败，尝试使用PIL写入: {output_path}")
                 success = XmpHandler.write_xmp(output_path, metadata)
-        elif format_info['needs_exiftool']:
+        elif format_info.get('needs_exiftool', False):
             # 使用exiftool写入
             success = MetadataWriter._write_with_exiftool(output_path, metadata)
         else:
             # 使用内置方法写入
-            if format_info['supports_exif']:
+            if format_info.get('supports_exif', False):
                 success = MetadataWriter._write_exif(output_path, metadata)
-            elif format_info['supports_xmp']:
+            elif format_info.get('supports_xmp', False):
                 # 使用XMP写入
                 success = XmpHandler.write_xmp(output_path, metadata)
             
@@ -573,3 +574,96 @@ class MetadataWriter:
                 })
 
         return results
+    
+    @staticmethod
+    def write_exif(filepath: str, metadata: Dict[str, Any]) -> bool:
+        """
+        写入EXIF数据
+        
+        Args:
+            filepath: 图片路径
+            metadata: EXIF数据字典
+            
+        Returns:
+            是否成功
+        """
+        try:
+            return MetadataWriter._write_exif(filepath, metadata)
+        except Exception as e:
+            logger.error(f"写入EXIF失败: {filepath}, 错误: {str(e)}")
+            return False
+    
+    @staticmethod
+    def write_xmp(filepath: str, metadata: Dict[str, Any]) -> bool:
+        """
+        写入XMP数据
+        
+        Args:
+            filepath: 图片路径
+            metadata: XMP数据字典
+            
+        Returns:
+            是否成功
+        """
+        try:
+            return XmpHandler.write_xmp(filepath, metadata)
+        except Exception as e:
+            logger.error(f"写入XMP失败: {filepath}, 错误: {str(e)}")
+            return False
+    
+    @staticmethod
+    def write_iptc(filepath: str, metadata: Dict[str, Any]) -> bool:
+        """
+        写入IPTC数据
+        
+        Args:
+            filepath: 图片路径
+            metadata: IPTC数据字典
+            
+        Returns:
+            是否成功
+        """
+        try:
+            # 尝试使用exiftool写入IPTC数据
+            et = get_exiftool()
+            if et.is_available:
+                # 转换字段名（内部名 -> ExifTool标签名）
+                iptc_metadata = {}
+                field_mapping = {
+                    'title': 'Title',
+                    'description': 'Description',
+                    'author': 'Author',
+                    'copyright': 'Copyright',
+                    'keywords': 'Keywords',
+                }
+                
+                for key, value in metadata.items():
+                    key_lower = key.lower()
+                    if key_lower in field_mapping:
+                        iptc_metadata[field_mapping[key_lower]] = str(value)
+                
+                return et.write_metadata(filepath, iptc_metadata)
+            return False
+        except Exception as e:
+            logger.error(f"写入IPTC失败: {filepath}, 错误: {str(e)}")
+            return False
+    
+    @staticmethod
+    def copy_filetime_to_exif(filepath: str) -> bool:
+        """
+        复制文件时间到EXIF
+        
+        Args:
+            filepath: 图片路径
+            
+        Returns:
+            是否成功
+        """
+        try:
+            et = get_exiftool()
+            if et.is_available:
+                return et.copy_filetime_to_exif(filepath)
+            return False
+        except Exception as e:
+            logger.error(f"复制文件时间到EXIF失败: {filepath}, 错误: {str(e)}")
+            return False

@@ -14,13 +14,14 @@ from .exif_handler import ExifHandler
 from .xmp_handler import XmpHandler
 from ..utils.exiftool_wrapper import get_exiftool
 from ..utils.helpers import get_file_extension, get_file_times
+from ..api.interfaces import IMetadataReader
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
 
 
-class MetadataReader:
-    """元信息读取引擎"""
+class MetadataReader(IMetadataReader):
+    """元信息读取引擎，实现IMetadataReader接口"""
 
     @staticmethod
     def read_metadata(filepath: str) -> Dict[str, Any]:
@@ -50,15 +51,15 @@ class MetadataReader:
         result['height'] = height
 
         # 根据格式读取元信息
-        if format_info['needs_exiftool']:
+        if format_info.get('needs_exiftool', False):
             # 使用exiftool读取（HEIC、RAW、PSD等）
             MetadataReader._read_with_exiftool(filepath, result)
         else:
             # 使用内置方法读取
-            if format_info['supports_exif']:
+            if format_info.get('supports_exif', False):
                 MetadataReader._read_exif(filepath, result)
 
-            if format_info['supports_xmp']:
+            if format_info.get('supports_xmp', False):
                 MetadataReader._read_xmp(filepath, result)
 
         # 确保datetime字段存在
@@ -303,3 +304,93 @@ class MetadataReader:
                     field_info['editable'] = True
         
         return editable
+    
+    @staticmethod
+    def read_exif(filepath: str) -> Dict[str, Any]:
+        """
+        读取EXIF数据
+        
+        Args:
+            filepath: 图片路径
+            
+        Returns:
+            EXIF数据字典
+        """
+        try:
+            return ExifHandler.read_exif(filepath)
+        except Exception as e:
+            logger.warning(f"读取EXIF失败: {filepath}, 错误: {str(e)}")
+            return {}
+    
+    @staticmethod
+    def read_xmp(filepath: str) -> Dict[str, Any]:
+        """
+        读取XMP数据
+        
+        Args:
+            filepath: 图片路径
+            
+        Returns:
+            XMP数据字典
+        """
+        try:
+            ext = get_file_extension(filepath)
+            
+            if ext == '.png':
+                xmp_data = XmpHandler.read_xmp_from_png(filepath)
+            else:
+                xmp_data = XmpHandler.read_xmp_from_file(filepath)
+            
+            return xmp_data or {}
+        except Exception as e:
+            logger.warning(f"读取XMP失败: {filepath}, 错误: {str(e)}")
+            return {}
+    
+    @staticmethod
+    def read_iptc(filepath: str) -> Dict[str, Any]:
+        """
+        读取IPTC数据
+        
+        Args:
+            filepath: 图片路径
+            
+        Returns:
+            IPTC数据字典
+        """
+        try:
+            # 尝试使用exiftool读取IPTC数据
+            et = get_exiftool()
+            if et.is_available:
+                # ExifTool可以读取IPTC数据
+                basic_info = et.get_basic_info(filepath)
+                # 提取IPTC相关字段
+                iptc_data = {}
+                iptc_fields = ['Title', 'Description', 'Author', 'Copyright', 'Keywords']
+                for field in iptc_fields:
+                    if field in basic_info:
+                        iptc_data[field.lower()] = basic_info[field]
+                return iptc_data
+            return {}
+        except Exception as e:
+            logger.warning(f"读取IPTC失败: {filepath}, 错误: {str(e)}")
+            return {}
+    
+    @staticmethod
+    def read_with_exiftool(filepath: str) -> Dict[str, Any]:
+        """
+        使用ExifTool读取元数据
+        
+        Args:
+            filepath: 图片路径
+            
+        Returns:
+            ExifTool读取的元数据字典
+        """
+        try:
+            et = get_exiftool()
+            if et.is_available:
+                return et.get_basic_info(filepath)
+            return {}
+        except Exception as e:
+            logger.warning(f"使用ExifTool读取失败: {filepath}, 错误: {str(e)}")
+            return {}

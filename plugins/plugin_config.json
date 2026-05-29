@@ -1,0 +1,27 @@
+{
+  "JPEG Format Plugin": {
+    "enabled": true,
+    "priority": 1,
+    "config": {
+      "auto_detect": true
+    }
+  },
+  "Batch Export Plugin": {
+    "enabled": true,
+    "priority": 1,
+    "config": {
+      "default_output_dir": "exports",
+      "default_format": "original"
+    }
+  },
+  "Watermark Extension Plugin": {
+    "enabled": true,
+    "priority": 10,
+    "config": {
+      "text": "King_photo",
+      "position": "bottom-right",
+      "opacity": 0.5,
+      "font_size": 20
+    }
+  }
+}
