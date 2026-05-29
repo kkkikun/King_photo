@@ -2,6 +2,7 @@
 King_photo - 工具函数
 """
 
+import logging
 import os
 import re
 import time
@@ -10,6 +11,9 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 from .constants import ALL_EXTENSIONS, TIME_PATTERNS
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 def get_file_extension(filepath: str) -> str:
@@ -99,22 +103,29 @@ def extract_time_from_filename(filename: str) -> Optional[datetime]:
                     groups = match.groups()
                     if len(groups) == 6:
                         dt_str = f"{groups[0]}{groups[1]}{groups[2]}_{groups[3]}{groups[4]}{groups[5]}"
-                        return datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                        dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                        # 验证年份在合理范围内
+                        if 2000 <= dt.year <= 2100:
+                            return dt
                     elif len(groups) == 3:
                         dt_str = f"{groups[0]}{groups[1]}{groups[2]}"
-                        return datetime.strptime(dt_str, "%Y%m%d")
+                        dt = datetime.strptime(dt_str, "%Y%m%d")
+                        # 验证年份在合理范围内
+                        if 2000 <= dt.year <= 2100:
+                            return dt
             except (ValueError, OverflowError, OSError):
                 continue
 
     # 2. 尝试提取13位毫秒级时间戳（常见于微信、QQ等）
     # 匹配模式：任意前缀_数字 或 mmexport数字 或纯数字
+    # 使用负向断言(?<!\d)和(?!\d)确保匹配完整的数字，避免部分匹配
     timestamp_patterns = [
-        r'(?:mmexport|img_|Image_|Cache_|comment_)?(\d{13})',  # 13位毫秒时间戳
-        r'(?:mmexport|img_|Image_|Cache_|comment_)?(\d{10})',  # 10位秒时间戳
-        r'_(\d{13})',  # 下划线后跟13位数字
-        r'_(\d{10})',  # 下划线后跟10位数字
-        r'^(\d{13})$',  # 纯13位数字
-        r'^(\d{10})$',  # 纯10位数字
+        r'(?:mmexport|img_|Image_|Cache_|comment_)?(?<!\d)(\d{13})(?!\d)',  # 13位毫秒时间戳
+        r'(?:mmexport|img_|Image_|Cache_|comment_)?(?<!\d)(\d{10})(?!\d)',  # 10位秒时间戳
+        r'_(?<!\d)(\d{13})(?!\d)',  # 下划线后跟13位数字
+        r'_(?<!\d)(\d{10})(?!\d)',  # 下划线后跟10位数字
+        r'^(?<!\d)(\d{13})(?!\d)$',  # 纯13位数字
+        r'^(?<!\d)(\d{10})(?!\d)$',  # 纯10位数字
     ]
 
     for pattern in timestamp_patterns:
@@ -125,8 +136,10 @@ def extract_time_from_filename(filename: str) -> Optional[datetime]:
                 # 判断是秒级还是毫秒级时间戳
                 if timestamp > 9999999999:  # 毫秒级
                     timestamp = timestamp / 1000
-                # 验证时间戳是否合理（2000-2100年）
-                if 946684800 <= timestamp <= 4102444800:
+                # 验证时间戳是否合理（1990-2030年）
+                # 1990-01-01 00:00:00 UTC = 631152000
+                # 2030-01-01 00:00:00 UTC = 1893456000
+                if 631152000 <= timestamp <= 1893456000:
                     return datetime.fromtimestamp(timestamp)
             except (ValueError, OverflowError, OSError):
                 continue
@@ -136,7 +149,8 @@ def extract_time_from_filename(filename: str) -> Optional[datetime]:
     if match:
         try:
             timestamp = int(match.group(1)) / 1000
-            if 946684800 <= timestamp <= 4102444800:
+            # 验证时间戳是否合理（1990-2030年）
+            if 631152000 <= timestamp <= 1893456000:
                 return datetime.fromtimestamp(timestamp)
         except (ValueError, OverflowError, OSError):
             pass
@@ -217,13 +231,85 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def set_file_times(filepath: str, dt: datetime) -> bool:
-    """设置文件的修改时间和访问时间"""
+def set_file_times(filepath: str, dt: datetime, set_created: bool = False, preserve_created: bool = None) -> bool:
+    """
+    设置文件的时间信息
+    
+    Args:
+        filepath: 文件路径
+        dt: 要设置的时间
+        set_created: 是否同时设置创建时间（仅Windows）
+        preserve_created: 是否保留原始创建时间（与set_created相反，如果设置此参数则忽略set_created）
+    
+    Returns:
+        是否设置成功
+    """
     try:
         timestamp = dt.timestamp()
         os.utime(filepath, (timestamp, timestamp))
+        
+        # 处理preserve_created参数：如果设置则忽略set_created
+        if preserve_created is not None:
+            set_created = not preserve_created
+        
+        # 在Windows系统上，尝试设置创建时间
+        if set_created and os.name == 'nt':
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                # Windows API 常量
+                GENERIC_WRITE = 0x40000000
+                FILE_SHARE_READ = 0x00000001
+                FILE_SHARE_WRITE = 0x00000002
+                OPEN_EXISTING = 3
+                FILE_ATTRIBUTE_NORMAL = 0x80
+                
+                # 打开文件
+                kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+                file_handle = kernel32.CreateFileW(
+                    filepath,
+                    GENERIC_WRITE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    None,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL,
+                    None
+                )
+                
+                if file_handle == -1:
+                    logger.warning(f"无法打开文件以设置创建时间: {filepath}")
+                    return True  # 至少修改时间设置成功了
+                
+                try:
+                    # 转换为Windows FILETIME
+                    # FILETIME是从1601年1月1日开始的100纳秒间隔数
+                    # 使用dt.timestamp()获取正确的UTC时间戳（已处理时区）
+                    unix_timestamp = int(dt.timestamp())
+                    # 从1601年到1970年的100纳秒间隔数
+                    epoc_diff = 116444736000000000
+                    filetime = int((unix_timestamp * 10000000) + epoc_diff)
+                    
+                    # 设置文件时间
+                    ctypes.windll.kernel32.SetFileTime(
+                        file_handle,
+                        ctypes.byref(ctypes.c_longlong(filetime)),  # 创建时间
+                        None,  # 访问时间
+                        None   # 修改时间
+                    )
+                    
+                    logger.info(f"成功设置文件创建时间: {filepath}")
+                finally:
+                    kernel32.CloseHandle(file_handle)
+                    
+            except ImportError:
+                logger.warning("ctypes模块不可用，无法设置创建时间")
+            except Exception as e:
+                logger.warning(f"设置创建时间失败: {filepath}, 错误: {str(e)}")
+        
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"设置文件时间失败: {filepath}, 错误: {str(e)}")
         return False
 
 

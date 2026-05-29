@@ -3,6 +3,7 @@ King_photo - 文件夹模式视图
 """
 
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import List, Optional, Dict
@@ -10,6 +11,9 @@ from typing import List, Optional, Dict
 from .widgets import ThumbnailWidget, ImagePreviewWidget, MetadataEditorWidget
 from ..core.metadata_reader import MetadataReader
 from ..utils.helpers import format_file_size, format_datetime
+
+# 异步加载阈值：文件数量超过此值时使用异步加载
+ASYNC_THRESHOLD = 20
 
 
 class FolderView(ttk.Frame):
@@ -102,6 +106,8 @@ class FolderView(ttk.Frame):
 
         # 创建缩略图
         cols = 4  # 每行4个
+        use_async = len(files) > ASYNC_THRESHOLD
+
         for i, filepath in enumerate(files):
             row = i // cols
             col = i % cols
@@ -115,6 +121,11 @@ class FolderView(ttk.Frame):
             )
             thumb.grid(row=row, column=col, padx=5, pady=5)
             self.thumbnails.append(thumb)
+
+            # 根据文件数量选择加载方式
+            if use_async:
+                thumb.load_thumbnail_async()
+            # 同步加载会在ThumbnailWidget初始化时自动完成
 
         self._update_select_count()
 

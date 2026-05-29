@@ -3,6 +3,7 @@ King_photo - 元信息读取引擎
 统一的元信息读取接口，支持所有格式
 """
 
+import logging
 import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -13,6 +14,9 @@ from .exif_handler import ExifHandler
 from .xmp_handler import XmpHandler
 from ..utils.exiftool_wrapper import get_exiftool
 from ..utils.helpers import get_file_extension, get_file_times
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 class MetadataReader:
@@ -69,7 +73,8 @@ class MetadataReader:
         try:
             with Image.open(filepath) as img:
                 return img.size
-        except Exception:
+        except Exception as e:
+            logger.debug(f"获取图片尺寸失败: {filepath}, 错误: {str(e)}")
             return (0, 0)
 
     @staticmethod
@@ -78,8 +83,8 @@ class MetadataReader:
         try:
             exif_data = ExifHandler.read_exif(filepath)
             result.update(exif_data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"读取EXIF补充信息失败: {filepath}, 错误: {str(e)}")
 
     @staticmethod
     def _read_xmp(filepath: str, result: Dict[str, Any]):
@@ -103,8 +108,8 @@ class MetadataReader:
                 if xmp_dt and ('datetime' not in result or result['datetime'] is None):
                     result['datetime'] = xmp_dt
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"读取XMP补充信息失败: {filepath}, 错误: {str(e)}")
 
     @staticmethod
     def _read_with_exiftool(filepath: str, result: Dict[str, Any]):
@@ -118,8 +123,8 @@ class MetadataReader:
                 et_dt = et.get_datetime(filepath)
                 if et_dt:
                     result['datetime'] = et_dt
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"ExifTool读取信息失败: {filepath}, 错误: {str(e)}")
 
     @staticmethod
     def get_datetime(filepath: str) -> Optional[datetime]:
@@ -150,8 +155,8 @@ class MetadataReader:
                     xmp_data = XmpHandler.read_xmp_from_file(filepath)
 
                 return XmpHandler.get_datetime(xmp_data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"获取XMP时间失败: {filepath}, 错误: {str(e)}")
 
         return None
 
@@ -175,29 +180,126 @@ class MetadataReader:
 
     @staticmethod
     def get_editable_fields(filepath: str) -> Dict[str, Any]:
-        """获取可编辑的字段"""
+        """获取可编辑的字段（根据格式适配）"""
         metadata = MetadataReader.read_metadata(filepath)
-
+        format_info = FormatDetector.get_format_info(filepath)
+        
         editable = {}
-
-        # 基本可编辑字段
-        edit_fields = [
-            ('title', '标题'),
-            ('description', '描述'),
-            ('artist', '作者'),
-            ('copyright', '版权'),
-            ('make', '相机品牌'),
-            ('model', '相机型号'),
-            ('software', '软件'),
-            ('lens', '镜头型号'),
-            ('datetime', '拍摄时间'),
+        
+        # 添加格式信息，便于UI显示
+        editable['_format_info'] = {
+            'format': format_info.get('format', 'Unknown'),
+            'supports_exif': format_info.get('supports_exif', False),
+            'supports_xmp': format_info.get('supports_xmp', False),
+            'needs_exiftool': format_info.get('needs_exiftool', False),
+            'extension': metadata.get('extension', ''),
+        }
+        
+        # 根据格式支持情况确定可编辑字段
+        supports_exif = format_info.get('supports_exif', False)
+        supports_xmp = format_info.get('supports_xmp', False)
+        needs_exiftool = format_info.get('needs_exiftool', False)
+        
+        # 1. 基本文件信息（所有格式都可显示，但不可编辑）
+        basic_fields = [
+            ('filename', '文件名', False),
+            ('extension', '扩展名', False),
+            ('filesize', '文件大小', False),
+            ('width', '宽度', False),
+            ('height', '高度', False),
+            ('format', '格式', False),
         ]
-
-        for field, label in edit_fields:
+        
+        # 文件时间字段（所有格式都可显示，可编辑）
+        time_fields = [
+            ('file_modified', '修改时间', True),
+            ('file_created', '创建时间', True),
+        ]
+        
+        for field, label, editable_flag in basic_fields:
             if field in metadata:
                 editable[field] = {
                     'value': metadata[field],
                     'label': label,
+                    'editable': editable_flag,
+                    'category': 'basic',
                 }
-
+        
+        # 添加时间字段
+        for field, label, editable_flag in time_fields:
+            value = metadata.get(field, '')
+            if value is None:
+                value = ''
+            editable[field] = {
+                'value': value,
+                'label': label,
+                'editable': editable_flag,
+                'category': 'time',
+            }
+        
+        # 2. 添加所有可能编辑的字段
+        
+        # 通用XMP字段
+        xmp_editable_fields = [
+            ('title', '标题', True),
+            ('description', '描述', True),
+            ('artist', '作者', True),
+            ('copyright', '版权', True),
+        ]
+        
+        for field, label, editable_flag in xmp_editable_fields:
+            # 如果字段不存在，设置默认值
+            value = metadata.get(field, '')
+            if value is None:
+                value = ''
+            
+            # 根据格式设置可编辑标志
+            field_editable = editable_flag and supports_xmp
+            
+            editable[field] = {
+                'value': value,
+                'label': label,
+                'editable': field_editable,
+                'category': 'xmp',
+            }
+        
+        # EXIF字段
+        exif_editable_fields = [
+            ('make', '相机品牌', True),
+            ('model', '相机型号', True),
+            ('software', '软件', True),
+            ('lens', '镜头型号', True),
+            ('datetime', '拍摄时间', True),
+            ('exposure_time', '曝光时间', False),
+            ('fnumber', '光圈', False),
+            ('iso', 'ISO', False),
+            ('focal_length', '焦距', False),
+            ('orientation', '方向', False),
+        ]
+        
+        for field, label, editable_flag in exif_editable_fields:
+            # 如果字段不存在，设置默认值
+            value = metadata.get(field, '')
+            if value is None:
+                value = ''
+            
+            # 根据格式设置可编辑标志
+            field_editable = editable_flag and supports_exif
+            
+            editable[field] = {
+                'value': value,
+                'label': label,
+                'editable': field_editable,
+                'category': 'exif',
+            }
+        
+        # 3. 对于需要exiftool的格式（HEIF、RAW等），所有字段都可编辑
+        if needs_exiftool:
+            # 确保所有EXIF和XMP字段都标记为可编辑
+            for field_key, field_info in editable.items():
+                if field_key.startswith('_'):
+                    continue
+                if field_info.get('category') in ['exif', 'xmp']:
+                    field_info['editable'] = True
+        
         return editable

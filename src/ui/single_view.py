@@ -22,7 +22,6 @@ class SingleView(ttk.Frame):
 
         self.app = app
         self.current_file = None
-        self._original_file = None  # 修复前的原始文件路径（用于恢复）
 
         self._create_ui()
 
@@ -87,7 +86,6 @@ class SingleView(ttk.Frame):
     def load_image(self, filepath: str):
         """加载图片"""
         self.current_file = filepath
-        self._original_file = None  # 重置原始文件记录
 
         # 加载预览
         self.preview.load_image(filepath)
@@ -159,7 +157,7 @@ class SingleView(ttk.Frame):
         self._save_metadata()
 
     def _full_repair(self):
-        """完整修复（带备份）"""
+        """完整修复"""
         if not self.current_file:
             messagebox.showinfo("提示", "请先加载图片")
             return
@@ -168,10 +166,10 @@ class SingleView(ttk.Frame):
         original_path = self.current_file
 
         # 确认对话框
-        if not messagebox.askyesno("确认", "将执行完整修复（后缀修复 + 时间修复）\n修复前会自动备份原文件（.res后缀）\n\n确定继续吗？"):
+        if not messagebox.askyesno("确认", "将执行完整修复（后缀修复 + 时间修复）\n\n请在操作前备份重要数据\n确定继续吗？"):
             return
 
-        result = RepairEngine.repair_with_backup(
+        result = RepairEngine.repair(
             original_path,
             output_dir=output_dir,
             fix_extension=True,
@@ -179,8 +177,6 @@ class SingleView(ttk.Frame):
         )
 
         if result['success']:
-            # 记录原始文件路径（用于恢复）
-            self._original_file = original_path
             messagebox.showinfo("成功", result['message'])
             # 加载修复后的文件
             self.current_file = result['output_path']
@@ -205,32 +201,18 @@ class SingleView(ttk.Frame):
             messagebox.showinfo("完成", message)
 
     def _restore(self):
-        """从备份恢复"""
+        """提示用户手动恢复"""
         if not self.current_file:
             messagebox.showinfo("提示", "请先加载图片")
             return
 
-        # 确定要恢复的文件（优先使用修复前记录的原始文件）
-        target_file = self._original_file or self.current_file
-
-        # 检查是否有备份
-        if not RepairEngine.has_backup(target_file):
-            messagebox.showinfo("提示", "当前文件没有找到备份文件（.res后缀）\n\n提示: 只有通过[修复]功能处理过的文件才能恢复")
-            return
-
-        # 确认
-        backup_name = os.path.basename(RepairEngine.get_backup_path(target_file))
-        if not messagebox.askyesno("确认", f"将从备份文件恢复原图:\n{backup_name}\n\n确定恢复吗？"):
-            return
-
-        result = RepairEngine.restore_from_backup(
-            RepairEngine.get_backup_path(target_file)
+        # 提示用户手动恢复
+        messagebox.showinfo(
+            "恢复提示",
+            "当前版本已移除自动备份功能\n\n"
+            "如需恢复文件，请：\n"
+            "1. 检查是否有其他备份副本\n"
+            "2. 使用系统还原点恢复\n"
+            "3. 从回收站恢复删除的文件\n\n"
+            "建议在操作前手动备份重要文件"
         )
-
-        if result['success']:
-            self._original_file = None
-            messagebox.showinfo("成功", result['message'])
-            # 重新加载恢复后的文件
-            self.load_image(result['restore_path'])
-        else:
-            messagebox.showerror("失败", result['message'])

@@ -3,6 +3,7 @@ King_photo - 文件处理模块
 处理文件重命名、时间修复等
 """
 
+import logging
 import os
 import shutil
 from datetime import datetime
@@ -18,6 +19,9 @@ from ..utils.helpers import (
     sanitize_filename
 )
 from ..utils.constants import DEFAULT_RENAME_FORMAT
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 class FileProcessor:
@@ -90,7 +94,9 @@ class FileProcessor:
     def fix_file_time(
         filepath: str,
         copy_mode: bool = True,
-        output_dir: str = None
+        output_dir: str = None,
+        preserve_created_time: bool = True,
+        time_source: str = 'auto'
     ) -> Dict[str, Any]:
         """
         修复文件时间（将文件时间设为拍摄时间）
@@ -99,6 +105,8 @@ class FileProcessor:
             filepath: 源文件路径
             copy_mode: 是否复制模式
             output_dir: 输出目录
+            preserve_created_time: 是否保留原始创建时间（默认True）
+            time_source: 时间来源 ('auto', 'metadata', 'modified', 'created')
 
         Returns:
             操作结果
@@ -106,13 +114,39 @@ class FileProcessor:
         if not os.path.exists(filepath):
             return {'success': False, 'message': '文件不存在'}
 
-        # 获取拍摄时间
-        photo_dt = MetadataReader.get_datetime(filepath)
+        # 根据time_source获取时间
+        photo_dt = None
+        if time_source == 'metadata':
+            # 只使用元数据时间
+            photo_dt = MetadataReader.get_datetime(filepath)
+        elif time_source == 'modified':
+            # 使用文件修改时间
+            try:
+                stat = os.stat(filepath)
+                photo_dt = datetime.fromtimestamp(stat.st_mtime)
+            except Exception as e:
+                logger.debug(f"获取文件修改时间失败: {filepath}, 错误: {str(e)}")
+        elif time_source == 'created':
+            # 使用文件创建时间
+            try:
+                stat = os.stat(filepath)
+                photo_dt = datetime.fromtimestamp(stat.st_ctime)
+            except Exception as e:
+                logger.debug(f"获取文件创建时间失败: {filepath}, 错误: {str(e)}")
+        else:  # 'auto' 或其他值
+            # 自动选择（先尝试元数据，再使用文件修改时间）
+            photo_dt = MetadataReader.get_datetime(filepath)
+            if photo_dt is None:
+                try:
+                    stat = os.stat(filepath)
+                    photo_dt = datetime.fromtimestamp(stat.st_mtime)
+                except Exception as e:
+                    logger.debug(f"获取文件修改时间失败: {filepath}, 错误: {str(e)}")
 
         if photo_dt is None:
             return {
                 'success': False,
-                'message': '无法获取拍摄时间'
+                'message': '无法获取时间信息'
             }
 
         # 确定输出路径
@@ -127,7 +161,9 @@ class FileProcessor:
             output_path = filepath
 
         # 修改文件时间
-        success = set_file_times(output_path, photo_dt)
+        # 如果preserve_created_time为True，则不修改创建时间
+        set_created = not preserve_created_time
+        success = set_file_times(output_path, photo_dt, set_created=set_created)
 
         if success:
             return {
@@ -196,7 +232,9 @@ class FileProcessor:
         file_list: List[str],
         output_dir: str = None,
         copy_mode: bool = True,
-        progress_callback: Callable = None
+        progress_callback: Callable = None,
+        preserve_created_time: bool = True,
+        time_source: str = 'auto'
     ) -> Dict[str, Any]:
         """
         批量修复时间
@@ -206,6 +244,8 @@ class FileProcessor:
             output_dir: 输出目录
             copy_mode: 是否复制模式
             progress_callback: 进度回调
+            preserve_created_time: 是否保留原始创建时间（默认True）
+            time_source: 时间来源 ('auto', 'metadata', 'modified', 'created')
 
         Returns:
             操作结果统计
@@ -222,7 +262,7 @@ class FileProcessor:
             if progress_callback:
                 progress_callback(i + 1, len(file_list), os.path.basename(filepath))
 
-            result = FileProcessor.fix_file_time(filepath, copy_mode, output_dir)
+            result = FileProcessor.fix_file_time(filepath, copy_mode, output_dir, preserve_created_time, time_source)
 
             if result['success']:
                 results['success'] += 1
@@ -273,7 +313,8 @@ class FileProcessor:
                 dest_path = get_unique_filename(dest_path)
                 shutil.copy2(filepath, dest_path)
                 results['success'] += 1
-            except Exception:
+            except Exception as e:
+                logger.error(f"复制文件失败: {filepath}, 错误: {str(e)}")
                 results['failed'] += 1
 
         return results

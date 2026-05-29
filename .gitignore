@@ -7,6 +7,8 @@ __pycache__/
 venv/
 ENV/
 env/
+*.egg-info/
+*.egg
 
 # PyInstaller
 dist/
@@ -22,7 +24,19 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Project
 *.log
 temp/
+logs/
+config/settings.json
+
+# Test data (large files)
+test/
+其他/
+风景/
+jpg文件问题/
+
+# Generated reports
+*.md.bak

@@ -21,6 +21,7 @@ SUPPORTED_FORMATS = {
     'BMP': (['.bmp'], False, False, False),
     'ICO': (['.ico'], False, False, False),
     'PSD': (['.psd'], True, True, True),
+    'MOV': (['.mov', '.mp4', '.m4v'], False, False, False),
 }
 
 # 所有支持的扩展名列表
@@ -46,6 +47,11 @@ FILE_SIGNATURES = {
     'NEF': [b'MM\x00\x2a'],
     'ARW': [b'II\x2a\x00'],
     'DNG': [b'II\x2a\x00', b'MM\x00\x2a'],
+    # 视频格式（非图片，用于检测误标记的文件）
+    'MOV': [b'\x00\x00\x00\x14ftypqt  ', b'\x00\x00\x00\x18ftypmp4 ', b'\x00\x00\x00\x1cftypmp41'],
+    'MP4': [b'\x00\x00\x00\x18ftypmp4 ', b'\x00\x00\x00\x1cftypmp41', b'\x00\x00\x00\x20ftypisom'],
+    'AVI': [b'RIFF'],
+    'WMV': [b'\x30\x26\xab\x75\x9e\x7b\xcf\x11'],
 }
 
 # EXIF时间字段优先级
@@ -55,13 +61,13 @@ EXIF_TIME_FIELDS = [
     306,    # DateTime
 ]
 
-# XMP时间字段
+# XMP时间字段（优先级从高到低）
 XMP_TIME_FIELDS = [
-    'xmp:CreateDate',
-    'xmp:ModifyDate',
-    'exif:DateTimeOriginal',
-    'exif:DateTimeDigitized',
-    'photoshop:DateCreated',
+    'photoshop:DateCreated',       # 拍摄时间/创建时间（PNG等纯XMP格式的标准字段）
+    'exif:DateTimeOriginal',       # 原始拍摄时间（EXIF格式在XMP中的映射）
+    'exif:DateTimeDigitized',      # 数字化时间
+    'xmp:CreateDate',              # XMP创建时间
+    'xmp:ModifyDate',              # XMP修改时间
 ]
 
 # EXIF字段定义 (标签ID, 名称, 是否可编辑)
@@ -98,24 +104,36 @@ EXIF_FIELDS = {
     'XPKeywords': (40094, '关键词', True),
 }
 
-# XMP字段定义
+# XMP字段定义（参考: https://www.exiftool.org/TagNames/XMP.html）
 XMP_FIELDS = {
+    # 时间相关
+    'xmp:CreateDate': '创建时间',          # 文件创建时间
+    'xmp:ModifyDate': '修改时间',          # 文件修改时间
+    'exif:DateTimeOriginal': '拍摄时间',    # 原始拍摄时间
+    'exif:DateTimeDigitized': '数字化时间', # 数字化时间
+    'photoshop:DateCreated': '创建日期',    # Photoshop创建日期
+    # 描述相关（dc命名空间）
     'dc:title': '标题',
     'dc:description': '描述',
     'dc:creator': '创建者',
     'dc:subject': '关键词',
-    'photoshop:City': '城市',
-    'photoshop:Country': '国家',
-    'xmp:CreateDate': '创建时间',
-    'xmp:ModifyDate': '修改时间',
-    'xmp:Rating': '评分',
+    'dc:rights': '版权',
+    # 相机信息（tiff命名空间 - PNG/WebP等纯XMP格式使用）
     'tiff:Make': '相机品牌',
     'tiff:Model': '相机型号',
-    'exif:DateTimeOriginal': '拍摄时间',
+    'tiff:Software': '软件',
+    'tiff:Orientation': '方向',
+    # 拍摄参数（exif命名空间 - 在XMP中映射EXIF字段）
+    'exif:LensModel': '镜头型号',
     'exif:FNumber': '光圈',
     'exif:ExposureTime': '曝光时间',
     'exif:ISOSpeedRatings': 'ISO',
     'exif:FocalLength': '焦距',
+    # 其他
+    'xmp:CreatorTool': '创建工具',
+    'xmp:Rating': '评分',
+    'photoshop:City': '城市',
+    'photoshop:Country': '国家',
 }
 
 # 重命名变量映射

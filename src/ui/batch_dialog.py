@@ -8,6 +8,7 @@ from tkinter import ttk, filedialog, messagebox
 from typing import List, Optional
 
 from ..utils.constants import RENAME_VARIABLES, DEFAULT_RENAME_FORMAT
+from ..core.metadata_reader import MetadataReader
 
 
 class RenameDialog(tk.Toplevel):
@@ -234,7 +235,7 @@ class RenameDialog(tk.Toplevel):
 class RepairDialog(tk.Toplevel):
     """修复对话框（带重命名选项）"""
 
-    def __init__(self, master, files: List[str], output_dir: str = None, **kwargs):
+    def __init__(self, master, files: List[str], output_dir: str = None, fix_extension: bool = True, fix_time: bool = True, **kwargs):
         super().__init__(master, **kwargs)
 
         self.title("修复图片")
@@ -244,6 +245,8 @@ class RepairDialog(tk.Toplevel):
         self.files = files
         self.output_dir = output_dir
         self.result = None
+        self.fix_extension = fix_extension
+        self.fix_time = fix_time
 
         # 居中显示
         screen_width = self.winfo_screenwidth()
@@ -263,19 +266,38 @@ class RepairDialog(tk.Toplevel):
 
     def _create_ui(self):
         """创建UI"""
+        # 主容器（带滚动）
+        main_canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=main_canvas.yview)
+        main_frame = ttk.Frame(main_canvas)
+
+        main_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 绑定鼠标滚轮
+        main_canvas.bind("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+
         # 文件数量提示
         ttk.Label(
-            self,
+            main_frame,
             text=f"已选择 {len(self.files)} 个文件",
             font=('Arial', 10, 'bold')
         ).pack(pady=10)
 
         # 修复选项
-        options_frame = ttk.LabelFrame(self, text="修复选项")
+        options_frame = ttk.LabelFrame(main_frame, text="修复选项")
         options_frame.pack(fill=tk.X, padx=10, pady=5)
 
         # 修复后缀选项
-        self.fix_extension_var = tk.BooleanVar(value=True)
+        self.fix_extension_var = tk.BooleanVar(value=self.fix_extension)
         ttk.Checkbutton(
             options_frame,
             text="修复错误后缀",
@@ -283,15 +305,37 @@ class RepairDialog(tk.Toplevel):
         ).pack(padx=10, pady=5, anchor=tk.W)
 
         # 修复时间选项
-        self.fix_time_var = tk.BooleanVar(value=True)
+        self.fix_time_var = tk.BooleanVar(value=self.fix_time)
         ttk.Checkbutton(
             options_frame,
             text="修复时间信息",
             variable=self.fix_time_var
         ).pack(padx=10, pady=5, anchor=tk.W)
 
+        # 时间来源选择
+        time_source_frame = ttk.Frame(options_frame)
+        time_source_frame.pack(fill=tk.X, padx=20, pady=2)
+
+        ttk.Label(time_source_frame, text="时间来源:").pack(side=tk.LEFT)
+
+        self.time_source_var = tk.StringVar(value="auto")
+        time_sources = [
+            ("自动选择（推荐）", "auto"),
+            ("使用元数据时间", "metadata"),
+            ("使用文件修改时间", "modified"),
+            ("使用文件创建时间", "created"),
+        ]
+
+        for text, value in time_sources:
+            ttk.Radiobutton(
+                time_source_frame,
+                text=text,
+                variable=self.time_source_var,
+                value=value
+            ).pack(side=tk.LEFT, padx=5)
+
         # 重命名格式
-        rename_frame = ttk.LabelFrame(self, text="重命名格式（修复后）")
+        rename_frame = ttk.LabelFrame(main_frame, text="重命名格式（修复后）")
         rename_frame.pack(fill=tk.X, padx=10, pady=5)
 
         input_frame = ttk.Frame(rename_frame)
@@ -310,7 +354,7 @@ class RepairDialog(tk.Toplevel):
         ).pack(padx=5, pady=2, anchor=tk.W)
 
         # 输出目录
-        output_frame = ttk.LabelFrame(self, text="输出目录")
+        output_frame = ttk.LabelFrame(main_frame, text="输出目录")
         output_frame.pack(fill=tk.X, padx=10, pady=5)
 
         output_input_frame = ttk.Frame(output_frame)
@@ -332,21 +376,42 @@ class RepairDialog(tk.Toplevel):
             foreground="gray"
         ).pack(padx=5, pady=2, anchor=tk.W)
 
-        # 备份说明
-        backup_frame = ttk.LabelFrame(self, text="备份机制")
-        backup_frame.pack(fill=tk.X, padx=10, pady=5)
+        # 未处理文件输出目录
+        unprocessed_frame = ttk.LabelFrame(main_frame, text="未处理文件输出目录")
+        unprocessed_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        unprocessed_input_frame = ttk.Frame(unprocessed_frame)
+        unprocessed_input_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.unprocessed_var = tk.StringVar(value='')
+        self.unprocessed_entry = ttk.Entry(unprocessed_input_frame, textvariable=self.unprocessed_var)
+        self.unprocessed_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Button(
+            unprocessed_input_frame,
+            text="浏览",
+            command=self._browse_unprocessed
+        ).pack(side=tk.LEFT, padx=5)
 
         ttk.Label(
-            backup_frame,
-            text="修复前会将原图备份为 .res 后缀文件\n"
-                 "例如: photo.jpg -> photo.jpg.res (备份)\n"
-                 "      photo.jpg -> 20240101_120000.jpg (修复后)\n\n"
-                 "如需恢复，删除修复后的文件，将 .res 后缀去掉即可",
+            unprocessed_frame,
+            text="非图片文件（如视频）将被复制到此目录，方便管理",
+            foreground="gray"
+        ).pack(padx=5, pady=2, anchor=tk.W)
+
+        # 操作提醒
+        reminder_frame = ttk.LabelFrame(main_frame, text="操作提醒")
+        reminder_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(
+            reminder_frame,
+            text="修复操作会修改文件，请在操作前备份重要数据\n"
+                 "修复后的文件会保留原始文件的时间属性",
             justify=tk.LEFT
         ).pack(padx=10, pady=10, anchor=tk.W)
 
         # 按钮
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, padx=10, pady=15)
 
         ttk.Button(
@@ -369,13 +434,21 @@ class RepairDialog(tk.Toplevel):
         if output_dir:
             self.output_var.set(output_dir)
 
+    def _browse_unprocessed(self):
+        """浏览未处理文件输出目录"""
+        unprocessed_dir = filedialog.askdirectory(title="选择未处理文件输出目录")
+        if unprocessed_dir:
+            self.unprocessed_var.set(unprocessed_dir)
+
     def _on_ok(self):
         """确定"""
         self.result = {
             'fix_extension': self.fix_extension_var.get(),
             'fix_time': self.fix_time_var.get(),
             'rename_format': self.format_var.get().strip() or '{datetime}',
-            'output_dir': self.output_var.get().strip() or None
+            'output_dir': self.output_var.get().strip() or None,
+            'time_source': self.time_source_var.get(),
+            'unprocessed_dir': self.unprocessed_var.get().strip() or None
         }
         self.destroy()
 
@@ -416,49 +489,87 @@ class BatchMetadataDialog(tk.Toplevel):
 
     def _create_ui(self):
         """创建UI"""
+        # 主容器（带滚动）
+        main_canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=main_canvas.yview)
+        main_frame = ttk.Frame(main_canvas)
+
+        main_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 绑定鼠标滚轮
+        main_canvas.bind("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+
         # 文件数量提示
         ttk.Label(
-            self,
+            main_frame,
             text=f"已选择 {len(self.files)} 个文件",
             font=('Arial', 10, 'bold')
         ).pack(pady=10)
 
-        # 编辑字段
-        fields_frame = ttk.LabelFrame(self, text="要修改的字段")
-        fields_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
+        # 根据第一个文件获取可编辑字段（用于确定字段可编辑性）
         self.entries = {}
-
-        fields = [
-            ('title', '标题'),
-            ('description', '描述'),
-            ('artist', '作者'),
-            ('copyright', '版权'),
-            ('make', '相机品牌'),
-            ('model', '相机型号'),
-        ]
-
-        for i, (field, label) in enumerate(fields):
-            frame = ttk.Frame(fields_frame)
-            frame.pack(fill=tk.X, padx=5, pady=2)
-
-            ttk.Label(frame, text=f"{label}:", width=10).pack(side=tk.LEFT)
-
-            var = tk.StringVar()
-            entry = ttk.Entry(frame, textvariable=var)
-            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-
-            self.entries[field] = var
+        self.entry_widgets = {}
+        
+        if self.files:
+            # 获取第一个文件的格式信息
+            first_file = self.files[0]
+            editable_fields = MetadataReader.get_editable_fields(first_file)
+            format_info = editable_fields.get('_format_info', {})
+            
+            # 显示格式信息
+            info_frame = ttk.LabelFrame(main_frame, text="格式信息")
+            info_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            format_name = format_info.get('format', 'Unknown')
+            supports = []
+            if format_info.get('supports_exif', False):
+                supports.append("EXIF")
+            if format_info.get('supports_xmp', False):
+                supports.append("XMP")
+            if format_info.get('needs_exiftool', False):
+                supports.append("需要ExifTool")
+            
+            support_text = f"格式: {format_name} | 支持: {', '.join(supports) if supports else '不支持元数据编辑'}"
+            ttk.Label(
+                info_frame,
+                text=support_text,
+                foreground="gray"
+            ).pack(padx=5, pady=5, anchor=tk.W)
+            
+            # 按类别分组显示字段
+            # 时间字段
+            time_fields = {k: v for k, v in editable_fields.items() if v.get('category') == 'time'}
+            if time_fields:
+                self._add_field_group(main_frame, "时间信息", time_fields)
+            
+            # XMP字段
+            xmp_fields = {k: v for k, v in editable_fields.items() if v.get('category') == 'xmp'}
+            if xmp_fields:
+                self._add_field_group(main_frame, "XMP信息", xmp_fields)
+            
+            # EXIF字段
+            exif_fields = {k: v for k, v in editable_fields.items() if v.get('category') == 'exif'}
+            if exif_fields:
+                self._add_field_group(main_frame, "EXIF信息", exif_fields)
 
         # 说明
         ttk.Label(
-            fields_frame,
-            text="留空的字段将不会被修改",
+            main_frame,
+            text="留空的字段将不会被修改\n灰色字段当前格式不支持编辑",
             foreground="gray"
-        ).pack(padx=5, pady=5, anchor=tk.W)
+        ).pack(padx=10, pady=5, anchor=tk.W)
 
         # 按钮
-        button_frame = ttk.Frame(self)
+        button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Button(
@@ -474,17 +585,55 @@ class BatchMetadataDialog(tk.Toplevel):
             command=self._on_cancel,
             width=10
         ).pack(side=tk.RIGHT, padx=5)
+    
+    def _add_field_group(self, parent, group_name: str, fields: dict):
+        """添加字段组"""
+        group_frame = ttk.LabelFrame(parent, text=group_name)
+        group_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        for field_name, field_info in fields.items():
+            label = field_info.get('label', field_name)
+            editable = field_info.get('editable', False)
+            
+            frame = ttk.Frame(group_frame)
+            frame.pack(fill=tk.X, padx=5, pady=2)
+            
+            # 根据可编辑状态设置颜色
+            if editable:
+                label_fg = '#000000'  # 黑色
+                entry_state = 'normal'
+            else:
+                label_fg = '#888888'  # 灰色
+                entry_state = 'disabled'
+            
+            ttk.Label(frame, text=f"{label}:", width=10, foreground=label_fg).pack(side=tk.LEFT)
+            
+            var = tk.StringVar()
+            entry = ttk.Entry(frame, textvariable=var, state=entry_state)
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+            
+            self.entries[field_name] = var
+            self.entry_widgets[field_name] = entry
 
     def _on_ok(self):
         """确定"""
         metadata = {}
         for field, var in self.entries.items():
+            # 跳过内部字段
+            if field.startswith('_'):
+                continue
+            
+            # 检查entry是否可用（可编辑）
+            entry = self.entry_widgets.get(field)
+            if entry and str(entry['state']) == 'disabled':
+                continue
+            
             value = var.get().strip()
             if value:
                 metadata[field] = value
 
         if not metadata:
-            messagebox.showwarning("警告", "请至少填写一个字段")
+            messagebox.showwarning("警告", "请至少填写一个可编辑字段")
             return
 
         self.result = metadata

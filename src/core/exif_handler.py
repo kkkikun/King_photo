@@ -4,7 +4,9 @@ King_photo - EXIF处理模块
 """
 
 import io
+import logging
 import struct
+import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -13,6 +15,9 @@ from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
 from ..utils.constants import EXIF_FIELDS, EXIF_TIME_FIELDS
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 class ExifHandler:
@@ -91,7 +96,50 @@ class ExifHandler:
                 result['orientation'] = exif_dict["0th"][piexif.ImageIFD.Orientation]
 
         except Exception as e:
-            pass
+            logger.debug(f"使用piexif读取EXIF信息失败: {filepath}, 错误: {str(e)}")
+            # 立即尝试使用exiftool作为回退
+            try:
+                from ..utils.exiftool_wrapper import get_exiftool
+                et = get_exiftool()
+                if et.is_available:
+                    metadata = et.read_metadata(filepath)
+                    if metadata:
+                        # 转换exiftool的元数据格式
+                        if 'EXIF:Make' in metadata:
+                            result['make'] = metadata['EXIF:Make']
+                        if 'EXIF:Model' in metadata:
+                            result['model'] = metadata['EXIF:Model']
+                        if 'EXIF:Software' in metadata:
+                            result['software'] = metadata['EXIF:Software']
+                        if 'EXIF:Artist' in metadata:
+                            result['artist'] = metadata['EXIF:Artist']
+                        if 'EXIF:Copyright' in metadata:
+                            result['copyright'] = metadata['EXIF:Copyright']
+                        if 'EXIF:ImageDescription' in metadata:
+                            result['description'] = metadata['EXIF:ImageDescription']
+                        if 'File:ImageWidth' in metadata:
+                            result['width'] = metadata['File:ImageWidth']
+                        if 'File:ImageHeight' in metadata:
+                            result['height'] = metadata['File:ImageHeight']
+                        if 'EXIF:ExposureTime' in metadata:
+                            result['exposure_time'] = metadata['EXIF:ExposureTime']
+                        if 'EXIF:FNumber' in metadata:
+                            result['fnumber'] = f"f/{metadata['EXIF:FNumber']}"
+                        if 'EXIF:ISO' in metadata:
+                            result['iso'] = str(metadata['EXIF:ISO'])
+                        if 'EXIF:FocalLength' in metadata:
+                            result['focal_length'] = f"{metadata['EXIF:FocalLength']}mm"
+                        if 'EXIF:LensModel' in metadata:
+                            result['lens'] = metadata['EXIF:LensModel']
+                        # 获取时间
+                        dt = et.get_datetime(filepath)
+                        if dt:
+                            result['datetime'] = dt
+                        if 'EXIF:Orientation' in metadata:
+                            result['orientation'] = metadata['EXIF:Orientation']
+                        logger.info(f"使用exiftool成功读取EXIF信息: {filepath}")
+            except Exception as exiftool_error:
+                logger.warning(f"使用exiftool读取EXIF也失败: {filepath}, 错误: {str(exiftool_error)}")
 
         return result
 
@@ -115,20 +163,92 @@ class ExifHandler:
     @staticmethod
     def write_exif(filepath: str, metadata: Dict[str, str]) -> bool:
         """写入EXIF信息"""
+        # 检查文件是否真的是图片格式
+        from .format_detector import FormatDetector
+        is_image, image_check_msg = FormatDetector.is_truly_image(filepath)
+        if not is_image:
+            logger.warning(f"文件不是真正的图片格式: {filepath}, {image_check_msg}")
+            return False
+        
+        # 对于PNG文件，直接使用exiftool写入，因为PNG不支持EXIF
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext == '.png':
+            # 尝试使用exiftool写入
+            try:
+                from ..utils.exiftool_wrapper import get_exiftool
+                et = get_exiftool()
+                if et.is_available:
+                    # 转换字段名（内部名 -> ExifTool标签名）
+                    et_metadata = {}
+                    field_mapping_et = {
+                        'artist': 'Artist',           # EXIF:Artist
+                        'copyright': 'Copyright',     # EXIF:Copyright
+                        'description': 'ImageDescription',  # EXIF:ImageDescription
+                        'make': 'Make',               # EXIF:Make
+                        'model': 'Model',             # EXIF:Model
+                        'software': 'Software',       # EXIF:Software
+                        'title': 'Title',             # IPTC:Title / XMP:dc:title
+                        'keywords': 'Keywords',       # IPTC:Keywords / XMP:dc:subject
+                        'lens': 'LensModel',          # EXIF:LensModel
+                        'orientation': 'Orientation', # EXIF:Orientation
+                        'exposure_time': 'ExposureTime',  # EXIF:ExposureTime
+                        'fnumber': 'FNumber',         # EXIF:FNumber
+                        'iso': 'ISO',                 # EXIF:ISOSpeedRatings
+                        'focal_length': 'FocalLength',  # EXIF:FocalLength
+                        'datetime': 'DateTimeOriginal',        # -> 拍摄时间
+                        'datetime_original': 'DateTimeOriginal',  # -> 拍摄时间
+                        'datetime_digitized': 'DateTimeDigitized',  # -> 数字化时间
+                        'creation_time': 'CreateDate',  # -> 创建时间 (ExifTool标签名)
+                    }
+                    
+                    for key, value in metadata.items():
+                        key_lower = key.lower()
+                        if key_lower in field_mapping_et:
+                            if isinstance(value, datetime):
+                                value = value.strftime("%Y:%m:%d %H:%M:%S")
+                            et_metadata[field_mapping_et[key_lower]] = str(value)
+                    
+                    # 对于PNG，需要设置ModifyDate字段（xmp:ModifyDate）
+                    if 'DateTimeOriginal' in et_metadata:
+                        et_metadata['ModifyDate'] = et_metadata['DateTimeOriginal']
+                    
+                    # 对于PNG，需要设置CreateDate字段（xmp:CreateDate）
+                    if 'CreateDate' not in et_metadata and 'DateTimeOriginal' in et_metadata:
+                        et_metadata['CreateDate'] = et_metadata['DateTimeOriginal']
+                    
+                    if et.write_metadata(filepath, et_metadata):
+                        logger.info(f"使用exiftool成功写入EXIF信息: {filepath}")
+                        return True
+                    else:
+                        # 如果exiftool写入失败，尝试使用copy_filetime_to_exif
+                        if 'datetime_original' in metadata or 'datetime' in metadata:
+                            return et.copy_filetime_to_exif(filepath)
+                else:
+                    logger.warning("ExifTool不可用，无法写入PNG EXIF信息")
+            except Exception as exiftool_error:
+                logger.warning(f"使用exiftool写入PNG EXIF也失败: {filepath}, 错误: {str(exiftool_error)}")
+            return False
+        
+        # 对于其他文件（JPEG/TIFF等），尝试使用piexif
         try:
             exif_dict = piexif.load(filepath)
 
-            # 写入支持的字段
+            # 写入支持的字段（EXIF标准字段映射）
+            # 标签ID参考: https://exiftool.org/TagNames/EXIF.html
             field_mapping = {
-                'artist': (piexif.ImageIFD.Artist, "0th"),
-                'copyright': (piexif.ImageIFD.Copyright, "0th"),
-                'description': (piexif.ImageIFD.ImageDescription, "0th"),
-                'make': (piexif.ImageIFD.Make, "0th"),
-                'model': (piexif.ImageIFD.Model, "0th"),
-                'software': (piexif.ImageIFD.Software, "0th"),
-                'datetime': (piexif.ImageIFD.DateTime, "0th"),
-                'datetime_original': (piexif.ExifIFD.DateTimeOriginal, "Exif"),
-                'datetime_digitized': (piexif.ExifIFD.DateTimeDigitized, "Exif"),
+                # IFD0 (主IFD) - 基本信息
+                'artist': (piexif.ImageIFD.Artist, "0th"),           # Tag 315
+                'copyright': (piexif.ImageIFD.Copyright, "0th"),     # Tag 33432
+                'description': (piexif.ImageIFD.ImageDescription, "0th"),  # Tag 270
+                'make': (piexif.ImageIFD.Make, "0th"),               # Tag 271
+                'model': (piexif.ImageIFD.Model, "0th"),             # Tag 272
+                'software': (piexif.ImageIFD.Software, "0th"),       # Tag 305
+                'datetime': (piexif.ImageIFD.DateTime, "0th"),       # Tag 306 (EXIF规范中的DateTime)
+                'orientation': (piexif.ImageIFD.Orientation, "0th"), # Tag 274
+                # ExifIFD - 拍摄信息
+                'datetime_original': (piexif.ExifIFD.DateTimeOriginal, "Exif"),   # Tag 36867 (拍摄时间)
+                'datetime_digitized': (piexif.ExifIFD.DateTimeDigitized, "Exif"), # Tag 36868 (数字化时间)
+                'lens': (piexif.ExifIFD.LensModel, "Exif"),         # Tag 42036
             }
 
             for key, value in metadata.items():
@@ -145,7 +265,51 @@ class ExifHandler:
 
             return True
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"使用piexif写入EXIF信息失败: {filepath}, 错误: {str(e)}")
+            # 立即尝试使用exiftool作为回退
+            try:
+                from ..utils.exiftool_wrapper import get_exiftool
+                et = get_exiftool()
+                if et.is_available:
+                    # 转换字段名（内部名 -> ExifTool标签名）
+                    et_metadata = {}
+                    field_mapping_et = {
+                        'artist': 'Artist',
+                        'copyright': 'Copyright',
+                        'description': 'ImageDescription',
+                        'make': 'Make',
+                        'model': 'Model',
+                        'software': 'Software',
+                        'lens': 'LensModel',
+                        'orientation': 'Orientation',
+                        'exposure_time': 'ExposureTime',
+                        'fnumber': 'FNumber',
+                        'iso': 'ISO',
+                        'focal_length': 'FocalLength',
+                        'datetime': 'DateTimeOriginal',
+                        'datetime_original': 'DateTimeOriginal',
+                        'datetime_digitized': 'DateTimeDigitized',
+                        'creation_time': 'CreateDate',
+                    }
+                    
+                    for key, value in metadata.items():
+                        key_lower = key.lower()
+                        if key_lower in field_mapping_et:
+                            if isinstance(value, datetime):
+                                value = value.strftime("%Y:%m:%d %H:%M:%S")
+                            et_metadata[field_mapping_et[key_lower]] = str(value)
+                    
+                    if et.write_metadata(filepath, et_metadata):
+                        logger.info(f"使用exiftool成功写入EXIF信息: {filepath}")
+                        return True
+                    else:
+                        # 如果exiftool写入失败，尝试使用copy_filetime_to_exif
+                        if 'datetime_original' in metadata or 'datetime' in metadata:
+                            return et.copy_filetime_to_exif(filepath)
+            except Exception as exiftool_error:
+                logger.warning(f"使用exiftool写入EXIF也失败: {filepath}, 错误: {str(exiftool_error)}")
+            
             return False
 
     @staticmethod
@@ -157,7 +321,18 @@ class ExifHandler:
 
             return ExifHandler._get_datetime(exif_ifd)
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"使用piexif获取EXIF时间失败: {filepath}, 错误: {str(e)}")
+            # 立即尝试使用exiftool
+            try:
+                from ..utils.exiftool_wrapper import get_exiftool
+                et = get_exiftool()
+                if et.is_available:
+                    dt = et.get_datetime(filepath)
+                    if dt:
+                        return dt
+            except Exception as exiftool_error:
+                logger.debug(f"使用exiftool获取EXIF时间也失败: {filepath}, 错误: {str(exiftool_error)}")
             return None
 
     @staticmethod
@@ -166,5 +341,19 @@ class ExifHandler:
         try:
             exif_dict = piexif.load(filepath)
             return bool(exif_dict.get("0th")) or bool(exif_dict.get("Exif"))
-        except Exception:
+        except Exception as e:
+            logger.debug(f"使用piexif检查EXIF数据失败: {filepath}, 错误: {str(e)}")
+            # 立即尝试使用exiftool
+            try:
+                from ..utils.exiftool_wrapper import get_exiftool
+                et = get_exiftool()
+                if et.is_available:
+                    metadata = et.read_metadata(filepath)
+                    if metadata:
+                        # 检查是否有EXIF相关字段
+                        exif_fields = [k for k in metadata.keys() if k.startswith('EXIF:')]
+                        if exif_fields:
+                            return True
+            except Exception as exiftool_error:
+                logger.debug(f"使用exiftool检查EXIF数据也失败: {filepath}, 错误: {str(exiftool_error)}")
             return False

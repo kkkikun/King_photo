@@ -1,0 +1,790 @@
+# King_photo 项目结构说明书
+
+## 目录
+
+- [项目概述](#项目概述)
+- [目录结构](#目录结构)
+- [核心模块详解](#核心模块详解)
+  - [core/ 目录](#core-目录)
+  - [ui/ 目录](#ui-目录)
+  - [utils/ 目录](#utils-目录)
+- [入口文件](#入口文件)
+- [配置和资源](#配置和资源)
+- [测试代码](#测试代码)
+- [模块依赖关系](#模块依赖关系)
+- [关键类和函数速查](#关键类和函数速查)
+
+---
+
+## 项目概述
+
+**项目名称**: King_photo - 图片元信息编辑与修复工具  
+**项目类型**: Python桌面GUI应用  
+**技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
+**版本**: v1.1.0
+
+### 核心功能
+1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
+2. 批量重命名（支持20+变量）
+3. 文件修复（后缀修复、时间修复）
+4. 格式支持：JPEG、PNG、GIF、WebP、TIFF、HEIC、RAW、AVIF、SVG等
+
+---
+
+## 目录结构
+
+```
+King_photo/
+├── src/                          # 源代码目录
+│   ├── __init__.py               # 包初始化
+│   ├── main.py                   # 程序入口
+│   │
+│   ├── core/                     # 核心业务逻辑
+│   │   ├── __init__.py
+│   │   ├── format_detector.py    # 格式检测器
+│   │   ├── metadata_reader.py    # 元数据读取引擎
+│   │   ├── metadata_writer.py    # 元数据写入引擎
+│   │   ├── exif_handler.py       # EXIF处理
+│   │   ├── xmp_handler.py        # XMP处理
+│   │   ├── repair_engine.py      # 修复引擎
+│   │   └── file_processor.py     # 文件处理器
+│   │
+│   ├── ui/                       # 用户界面
+│   │   ├── __init__.py
+│   │   ├── app.py                # 主应用窗口
+│   │   ├── folder_view.py        # 文件夹模式视图
+│   │   ├── single_view.py        # 单图片模式视图
+│   │   ├── batch_dialog.py       # 批量操作对话框
+│   │   └── widgets.py            # 自定义UI组件
+│   │
+│   └── utils/                    # 工具函数
+│       ├── __init__.py
+│       ├── constants.py          # 常量定义
+│       ├── helpers.py            # 辅助函数
+│       ├── exiftool_wrapper.py   # ExifTool封装
+│       ├── config_manager.py     # 配置管理器
+│       ├── logging_config.py     # 日志配置
+│       └── error_report.py       # 错误报告
+│
+├── assets/                       # 资源文件
+│   └── icons/                    # 图标资源
+│
+├── config/                       # 配置文件目录
+│   └── settings.json             # 用户配置
+│
+├── logs/                         # 日志文件目录
+│   └── king_photo_YYYY-MM-DD.log
+│
+├── tests/                        # 测试代码
+│   ├── __init__.py
+│   ├── test_format_detector.py
+│   ├── test_metadata_reader.py
+│   ├── test_metadata_writer.py
+│   ├── test_repair_engine.py
+│   ├── test_helpers.py
+│   └── test_data/                # 测试数据
+│
+├── run.py                        # 启动脚本
+├── build.py                      # 打包脚本
+├── test_program.py               # 程序测试脚本
+├── requirements.txt              # 依赖列表
+├── README.md                     # 项目说明
+├── DEVELOPMENT_RULES.md          # 开发规则
+└── PROJECT_STRUCTURE.md          # 项目结构说明书（本文件）
+```
+
+---
+
+## 核心模块详解
+
+### core/ 目录
+
+核心业务逻辑层，不包含任何UI代码。
+
+#### 1. format_detector.py - 格式检测器
+
+**职责**: 通过文件头魔数检测真实文件格式
+
+**主要类**:
+- `FormatDetector`: 格式检测器类
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `detect_by_header(filepath)` | 通过文件头检测格式 | `Optional[str]` |
+| `detect_by_extension(filepath)` | 通过扩展名检测格式 | `Optional[str]` |
+| `get_real_format(filepath)` | 获取真实格式 | `Tuple[Optional[str], bool]` |
+| `is_truly_image(filepath)` | 检查是否为真正的图片 | `Tuple[bool, str]` |
+| `is_video_file(filepath)` | 检查是否为视频文件 | `Tuple[bool, str]` |
+| `get_format_info(filepath)` | 获取格式详细信息 | `dict` |
+
+**依赖**: `constants.FILE_SIGNATURES`, `constants.SUPPORTED_FORMATS`
+
+**代码行数**: ~250行
+
+---
+
+#### 2. metadata_reader.py - 元数据读取引擎
+
+**职责**: 统一的元信息读取接口，支持所有格式
+
+**主要类**:
+- `MetadataReader`: 元数据读取器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `read_metadata(filepath)` | 读取完整元信息 | `Dict[str, Any]` |
+| `get_datetime(filepath)` | 快速获取拍摄时间 | `Optional[datetime]` |
+| `get_summary(filepath)` | 获取元信息摘要 | `Dict[str, Any]` |
+| `get_editable_fields(filepath)` | 获取可编辑字段 | `Dict[str, Any]` |
+
+**内部方法**:
+- `_read_exif()`: 读取EXIF信息
+- `_read_xmp()`: 读取XMP信息
+- `_read_with_exiftool()`: 使用ExifTool读取
+- `_get_image_size()`: 获取图片尺寸
+
+**依赖**: `format_detector`, `exif_handler`, `xmp_handler`, `exiftool_wrapper`
+
+**代码行数**: ~300行
+
+---
+
+#### 3. metadata_writer.py - 元数据写入引擎
+
+**职责**: 统一的元信息写入接口
+
+**主要类**:
+- `MetadataWriter`: 元数据写入器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `write_metadata(filepath, metadata, copy_mode, output_dir)` | 写入元信息 | `Dict[str, Any]` |
+| `write_metadata_from_filetime(filepath, copy_mode, output_dir)` | 将文件时间复制到EXIF | `Dict[str, Any]` |
+| `batch_write_metadata(file_list, metadata, ...)` | 批量写入元信息 | `Dict[str, Any]` |
+
+**内部方法**:
+- `_write_exif()`: 写入EXIF（带回退）
+- `_write_exif_with_piexif()`: 使用piexif写入
+- `_write_exif_with_exiftool_fallback()`: 使用ExifTool回退写入
+- `_write_with_exiftool()`: 使用ExifTool写入
+
+**依赖**: `format_detector`, `exif_handler`, `xmp_handler`, `exiftool_wrapper`
+
+**代码行数**: ~550行
+
+---
+
+#### 4. exif_handler.py - EXIF处理
+
+**职责**: EXIF格式数据的读写处理
+
+**主要类**:
+- `ExifHandler`: EXIF处理器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `read_exif(filepath)` | 读取EXIF数据 | `Dict[str, Any]` |
+| `write_exif(filepath, metadata)` | 写入EXIF数据 | `bool` |
+| `get_datetime(filepath)` | 获取EXIF时间 | `Optional[datetime]` |
+| `has_exif(filepath)` | 检查是否有EXIF | `bool` |
+
+**依赖**: `piexif`, `exiftool_wrapper`
+
+**代码行数**: ~350行
+
+---
+
+#### 5. xmp_handler.py - XMP处理
+
+**职责**: XMP格式数据的读写处理（PNG、SVG、WebP等）
+
+**主要类**:
+- `XmpHandler`: XMP处理器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `read_xmp_from_png(filepath)` | 从PNG读取XMP | `Dict[str, Any]` |
+| `read_xmp_from_file(filepath)` | 从文件读取XMP | `Dict[str, Any]` |
+| `write_xmp(filepath, metadata)` | 写入XMP（自动路由） | `bool` |
+| `write_xmp_to_png(filepath, metadata)` | 写入XMP到PNG | `bool` |
+| `write_xmp_to_svg(filepath, metadata)` | 写入XMP到SVG | `bool` |
+| `write_xmp_to_webp(filepath, metadata)` | 写入XMP到WebP | `bool` |
+| `get_datetime(xmp_data)` | 从XMP数据获取时间 | `Optional[datetime]` |
+
+**依赖**: `lxml`, `Pillow`, `exiftool_wrapper`
+
+**代码行数**: ~450行
+
+---
+
+#### 6. repair_engine.py - 修复引擎
+
+**职责**: 文件后缀修复、时间信息提取和修复
+
+**主要类**:
+- `RepairEngine`: 修复引擎
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `check_file_extension(filepath)` | 检查文件后缀 | `Dict[str, Any]` |
+| `fix_extension(filepath, output_dir)` | 修复文件后缀 | `Dict[str, Any]` |
+| `extract_time_info(filepath, time_source)` | 提取时间信息 | `Dict[str, Any]` |
+| `repair(filepath, ...)` | 完整修复流程 | `Dict[str, Any]` |
+| `batch_repair(file_list, ...)` | 批量修复 | `Dict[str, Any]` |
+| `batch_repair_extension(file_list, ...)` | 批量修复后缀 | `Dict[str, Any]` |
+
+**依赖**: `format_detector`, `metadata_reader`, `metadata_writer`, `helpers`
+
+**代码行数**: ~670行
+
+---
+
+#### 7. file_processor.py - 文件处理器
+
+**职责**: 文件批量处理和文件夹操作
+
+**主要类**:
+- `FileProcessor`: 文件处理器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `get_image_files(folder_path)` | 获取文件夹中的图片 | `List[str]` |
+| `process_files(file_list, operation)` | 批量处理文件 | `Dict[str, Any]` |
+
+**代码行数**: ~150行
+
+---
+
+### ui/ 目录
+
+用户界面层，使用tkinter + ttkbootstrap。
+
+#### 1. app.py - 主应用窗口
+
+**职责**: 主窗口、菜单、工具栏、模式切换
+
+**主要类**:
+- `MainWindow`: 主窗口类
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `_create_menu()` | 创建菜单栏 |
+| `_create_toolbar()` | 创建工具栏 |
+| `_create_statusbar()` | 创建状态栏 |
+| `_open_folder()` | 打开文件夹 |
+| `_open_single_image()` | 打开单张图片 |
+| `_batch_rename()` | 批量重命名 |
+| `_batch_edit_metadata()` | 批量编辑元信息 |
+| `_repair_with_dialog()` | 修复对话框 |
+
+**依赖**: `folder_view`, `single_view`, `metadata_reader`, `repair_engine`, `config_manager`
+
+**代码行数**: ~600行
+
+---
+
+#### 2. folder_view.py - 文件夹模式视图
+
+**职责**: 文件夹模式下的缩略图网格显示
+
+**主要类**:
+- `FolderView`: 文件夹视图
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `load_folder(folder_path)` | 加载文件夹 |
+| `_create_thumbnail_grid()` | 创建缩略图网格 |
+| `_select_all()` | 全选 |
+| `_invert_selection()` | 反选 |
+| `get_selected_files()` | 获取选中的文件 |
+
+**依赖**: `widgets.ThumbnailWidget`
+
+**代码行数**: ~400行
+
+---
+
+#### 3. single_view.py - 单图片模式视图
+
+**职责**: 单张图片的预览和编辑
+
+**主要类**:
+- `SingleView`: 单图片视图
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `load_image(filepath)` | 加载图片 |
+| `_show_preview()` | 显示预览 |
+| `_show_metadata()` | 显示元数据 |
+| `_save_metadata()` | 保存元数据 |
+| `_repair_image()` | 修复图片 |
+
+**依赖**: `widgets.ImagePreviewWidget`, `widgets.MetadataEditorWidget`, `metadata_reader`, `metadata_writer`
+
+**代码行数**: ~500行
+
+---
+
+#### 4. batch_dialog.py - 批量操作对话框
+
+**职责**: 批量操作的对话框界面
+
+**主要类**:
+- `RenameDialog`: 重命名对话框
+- `RepairDialog`: 修复对话框
+- `BatchMetadataDialog`: 批量元数据编辑对话框
+
+**关键特性**:
+- 使用Canvas + Scrollbar实现可滚动内容
+- 支持进度显示和取消操作
+- 响应式布局
+
+**依赖**: `repair_engine`, `metadata_writer`
+
+**代码行数**: ~800行
+
+---
+
+#### 5. widgets.py - 自定义UI组件
+
+**职责**: 可复用的UI组件
+
+**主要类**:
+| 类名 | 功能 |
+|------|------|
+| `ThumbnailWidget` | 缩略图组件 |
+| `ImagePreviewWidget` | 图片预览组件 |
+| `MetadataEditorWidget` | 元数据编辑器 |
+| `ProgressDialog` | 进度对话框 |
+| `ScrollableFrame` | 可滚动框架 |
+
+**关键特性**:
+- `ThumbnailWidget`: 支持异步加载、错误显示、选择状态
+- `MetadataEditorWidget`: 格式自适应字段显示、按类别分组
+- `ProgressDialog`: 支持取消操作、进度回调
+
+**代码行数**: ~700行
+
+---
+
+### utils/ 目录
+
+通用工具函数层，无业务逻辑。
+
+#### 1. constants.py - 常量定义
+
+**职责**: 所有常量定义
+
+**主要常量**:
+| 常量名 | 功能 |
+|--------|------|
+| `SUPPORTED_FORMATS` | 支持的格式定义（扩展名、EXIF/XMP支持、是否需要ExifTool） |
+| `FILE_SIGNATURES` | 文件头魔数签名 |
+| `EXIF_TIME_FIELDS` | EXIF时间字段优先级 |
+| `XMP_TIME_FIELDS` | XMP时间字段 |
+| `EXIF_FIELDS` | EXIF字段定义（标签ID、名称、可编辑性） |
+| `XMP_FIELDS` | XMP字段定义 |
+| `RENAME_VARIABLES` | 重命名变量映射 |
+| `TIME_PATTERNS` | 时间格式正则表达式 |
+| `ALL_EXTENSIONS` | 所有支持的扩展名列表 |
+
+**代码行数**: ~200行
+
+---
+
+#### 2. helpers.py - 辅助函数
+
+**职责**: 通用辅助函数
+
+**主要函数**:
+| 函数名 | 功能 | 返回值 |
+|--------|------|--------|
+| `get_file_extension(filepath)` | 获取文件扩展名 | `str` |
+| `is_supported_image(filepath)` | 检查是否支持的图片 | `bool` |
+| `get_image_files_in_folder(folder)` | 获取文件夹中的图片 | `List[str]` |
+| `format_file_size(size_bytes)` | 格式化文件大小 | `str` |
+| `format_datetime(dt)` | 格式化日期时间 | `str` |
+| `parse_datetime(dt_str)` | 解析日期时间字符串 | `Optional[datetime]` |
+| `extract_time_from_filename(filename)` | 从文件名提取时间 | `Optional[datetime]` |
+| `generate_renamed_filename(...)` | 生成重命名文件名 | `str` |
+| `sanitize_filename(filename)` | 清理文件名非法字符 | `str` |
+| `set_file_times(filepath, dt, ...)` | 设置文件时间 | `bool` |
+| `get_file_times(filepath)` | 获取文件时间信息 | `dict` |
+| `ensure_output_folder(path)` | 确保输出文件夹存在 | `str` |
+| `get_unique_filename(filepath)` | 获取唯一文件名 | `str` |
+
+**代码行数**: ~350行
+
+---
+
+#### 3. exiftool_wrapper.py - ExifTool封装
+
+**职责**: ExifTool命令行工具封装
+
+**主要类**:
+- `ExifToolWrapper`: ExifTool封装类
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `read_metadata(filepath)` | 读取元信息 | `Dict[str, Any]` |
+| `write_metadata(filepath, metadata)` | 写入元信息 | `bool` |
+| `copy_filetime_to_exif(filepath)` | 复制文件时间到EXIF | `bool` |
+| `fix_filename_extension(filepath)` | 修复文件扩展名 | `bool` |
+| `rename_by_modification_time(filepath)` | 根据修改时间重命名 | `bool` |
+| `get_datetime(filepath)` | 获取拍摄时间 | `Optional[datetime]` |
+| `get_basic_info(filepath)` | 获取基本信息 | `Dict[str, Any]` |
+
+**关键特性**:
+- 单例模式（`get_exiftool()`）
+- 短路径支持（`_get_short_path()`处理中文路径）
+- charset选项（`-charset filename=utf8 -charset utf8`）
+
+**代码行数**: ~450行
+
+---
+
+#### 4. config_manager.py - 配置管理器
+
+**职责**: JSON配置文件管理
+
+**主要类**:
+- `ConfigManager`: 配置管理器
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `get(key, default)` | 获取配置项 | `Any` |
+| `set(key, value)` | 设置配置项 | `None` |
+| `save()` | 保存配置 | `None` |
+| `load()` | 加载配置 | `None` |
+
+**配置层级**: 使用点号分隔的层级（如`window.width`）
+
+**代码行数**: ~200行
+
+---
+
+#### 5. logging_config.py - 日志配置
+
+**职责**: 统一日志配置
+
+**主要类**:
+- `CategorizedLogStorage`: 分类日志存储
+
+**关键特性**:
+- 按级别分类存储
+- 退出时按优先级写入（ERROR→WARNING→INFO→DEBUG）
+- 每次运行覆盖日志文件
+
+**代码行数**: ~150行
+
+---
+
+#### 6. error_report.py - 错误报告
+
+**职责**: 错误汇总和导出
+
+**主要类**:
+- `ErrorReport`: 错误报告
+
+**关键方法**:
+| 方法 | 功能 |
+|------|------|
+| `generate_error_report_from_batch_result(result)` | 从批量结果生成报告 |
+| `show_error_report_dialog(parent, report)` | 显示错误报告对话框 |
+| `export_to_file(report, filepath)` | 导出到文件 |
+
+**代码行数**: ~250行
+
+---
+
+## 入口文件
+
+### run.py - 启动脚本
+
+**功能**: 程序入口点
+
+**代码内容**:
+```python
+import sys
+import os
+
+# 添加项目根目录到sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from src.main import main
+
+if __name__ == '__main__':
+    main()
+```
+
+### src/main.py - 主模块
+
+**功能**: 初始化应用程序
+
+**主要功能**:
+1. 配置日志系统
+2. 注册HEIC格式支持（pillow_heif）
+3. 创建并启动主窗口
+
+---
+
+## 配置和资源
+
+### config/settings.json
+
+**功能**: 用户配置持久化
+
+**配置项示例**:
+```json
+{
+  "window": {
+    "width": 1200,
+    "height": 800
+  },
+  "paths": {
+    "last_folder": "",
+    "output_dir": ""
+  },
+  "rename": {
+    "default_format": "{datetime}"
+  },
+  "repair": {
+    "default_time_source": "auto",
+    "fix_extension": true,
+    "fix_time": true
+  }
+}
+```
+
+### assets/icons/
+
+**功能**: 图标资源文件
+
+---
+
+## 测试代码
+
+### tests/ 目录
+
+**测试文件**:
+| 文件名 | 测试内容 |
+|--------|----------|
+| `test_format_detector.py` | 格式检测器测试 |
+| `test_metadata_reader.py` | 元数据读取测试 |
+| `test_metadata_writer.py` | 元数据写入测试 |
+| `test_repair_engine.py` | 修复引擎测试 |
+| `test_helpers.py` | 辅助函数测试 |
+
+**测试数据**: `tests/test_data/` 目录包含各种格式的测试图片
+
+---
+
+## 模块依赖关系
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                          UI层                                │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │  app.py  │  │folder_view│  │single_view│  │batch_dialog│  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │              │              │              │          │
+│       └──────────────┴──────────────┴──────────────┘          │
+│                          │                                    │
+│                    widgets.py                                 │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        Core层                                │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │format_   │  │metadata_ │  │metadata_ │  │repair_   │   │
+│  │detector  │  │reader    │  │writer    │  │engine    │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │              │              │              │          │
+│       └──────────────┴──────────────┴──────────────┘          │
+│                          │                                    │
+│         ┌────────────────┼────────────────┐                  │
+│         ▼                ▼                ▼                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+│  │exif_     │  │xmp_      │  │file_     │                  │
+│  │handler   │  │handler   │  │processor │                  │
+│  └──────────┘  └──────────┘  └──────────┘                  │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       Utils层                                │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │constants │  │helpers   │  │exiftool_ │  │config_   │   │
+│  │          │  │          │  │wrapper   │  │manager   │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│  ┌──────────┐  ┌──────────┐                                │
+│  │logging_  │  │error_    │                                │
+│  │config    │  │report    │                                │
+│  └──────────┘  └──────────┘                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**依赖规则**:
+1. **UI层** → 可以导入Core层和Utils层
+2. **Core层** → 只能导入Utils层
+3. **Utils层** → 不能导入Core层或UI层
+
+---
+
+## 关键类和函数速查
+
+### 格式检测
+```python
+# 格式检测器
+from src.core.format_detector import FormatDetector
+
+# 检测格式
+format_name = FormatDetector.detect_by_header(filepath)  # 通过文件头
+format_name = FormatDetector.detect_by_extension(filepath)  # 通过扩展名
+real_format, is_consistent = FormatDetector.get_real_format(filepath)  # 获取真实格式
+
+# 格式验证
+is_image, msg = FormatDetector.is_truly_image(filepath)
+is_video, msg = FormatDetector.is_video_file(filepath)
+format_info = FormatDetector.get_format_info(filepath)
+```
+
+### 元数据读取
+```python
+# 元数据读取器
+from src.core.metadata_reader import MetadataReader
+
+# 读取元数据
+metadata = MetadataReader.read_metadata(filepath)
+dt = MetadataReader.get_datetime(filepath)
+summary = MetadataReader.get_summary(filepath)
+editable_fields = MetadataReader.get_editable_fields(filepath)
+```
+
+### 元数据写入
+```python
+# 元数据写入器
+from src.core.metadata_writer import MetadataWriter
+
+# 写入元数据
+result = MetadataWriter.write_metadata(filepath, metadata, copy_mode=True)
+result = MetadataWriter.write_metadata_from_filetime(filepath)
+results = MetadataWriter.batch_write_metadata(file_list, metadata)
+```
+
+### 修复引擎
+```python
+# 修复引擎
+from src.core.repair_engine import RepairEngine
+
+# 检查和修复
+check_result = RepairEngine.check_file_extension(filepath)
+ext_result = RepairEngine.fix_extension(filepath, output_dir)
+time_info = RepairEngine.extract_time_info(filepath, time_source='auto')
+
+# 完整修复
+result = RepairEngine.repair(filepath, rename_format='{datetime}', output_dir=output_dir)
+
+# 批量修复
+results = RepairEngine.batch_repair(file_list, rename_format='{datetime}')
+results = RepairEngine.batch_repair_extension(file_list)
+```
+
+### ExifTool封装
+```python
+# ExifTool单例
+from src.utils.exiftool_wrapper import get_exiftool
+
+et = get_exiftool()
+if et.is_available:
+    metadata = et.read_metadata(filepath)
+    success = et.write_metadata(filepath, metadata)
+    dt = et.get_datetime(filepath)
+```
+
+### 工具函数
+```python
+# 辅助函数
+from src.utils.helpers import (
+    extract_time_from_filename,
+    generate_renamed_filename,
+    set_file_times,
+    get_file_times,
+    get_unique_filename,
+    sanitize_filename,
+    format_file_size,
+    format_datetime
+)
+
+# 配置管理
+from src.utils.config_manager import get_config_manager
+
+config = get_config_manager()
+width = config.get('window.width', 1200)
+config.set('window.width', 1400)
+config.save()
+```
+
+---
+
+## 代码统计
+
+| 模块 | 文件数 | 代码行数（估计） |
+|------|--------|------------------|
+| core/ | 7 | ~2,700行 |
+| ui/ | 5 | ~3,000行 |
+| utils/ | 6 | ~1,600行 |
+| 入口/测试 | 5 | ~500行 |
+| **总计** | **23** | **~7,800行** |
+
+---
+
+## 使用说明
+
+### 快速定位代码
+
+1. **查看格式检测逻辑**: `src/core/format_detector.py`
+2. **查看元数据读取**: `src/core/metadata_reader.py`
+3. **查看元数据写入**: `src/core/metadata_writer.py`
+4. **查看修复流程**: `src/core/repair_engine.py`
+5. **查看UI主窗口**: `src/ui/app.py`
+6. **查看缩略图组件**: `src/ui/widgets.py` → `ThumbnailWidget`
+7. **查看ExifTool集成**: `src/utils/exiftool_wrapper.py`
+8. **查看常量定义**: `src/utils/constants.py`
+
+### 添加新功能
+
+1. **添加新格式支持**:
+   - 修改 `constants.py` 添加格式定义
+   - 修改 `format_detector.py` 添加检测逻辑
+   - 修改 `metadata_reader.py` 添加读取支持
+   - 修改 `metadata_writer.py` 添加写入支持
+
+2. **添加新UI功能**:
+   - 修改 `app.py` 添加菜单/工具栏
+   - 在 `widgets.py` 中创建新组件
+   - 使用 `batch_dialog.py` 模式创建对话框
+
+3. **添加新的元数据字段**:
+   - 修改 `constants.py` 添加字段定义
+   - 修改 `exif_handler.py` 和 `xmp_handler.py` 添加处理
+   - 修改 `metadata_writer.py` 添加写入支持
+
+---
+
+**文档版本**: 1.0  
+**最后更新**: 2026-05-29  
+**维护者**: King_photo 开发团队

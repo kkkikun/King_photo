@@ -2,7 +2,9 @@
 King_photo - 主应用窗口
 """
 
+import logging
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import List, Optional
@@ -14,21 +16,35 @@ from ..core.file_processor import FileProcessor
 from ..core.repair_engine import RepairEngine
 from ..core.metadata_writer import MetadataWriter
 from ..utils.helpers import get_image_files_in_folder, is_supported_image
+from ..utils.config_manager import get_config_manager
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 
 class MainWindow:
     """主窗口"""
 
     def __init__(self):
+        # 加载配置
+        self.config = get_config_manager()
+
         self.root = tk.Tk()
         self.root.title("King_photo - 图片元信息编辑与修复工具")
-        self.root.geometry("1200x800")
+
+        # 从配置加载窗口大小
+        width = self.config.get('window.width', 1200)
+        height = self.config.get('window.height', 800)
+        self.root.geometry(f"{width}x{height}")
         self.root.minsize(800, 600)
+
+        # 绑定窗口关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # 当前模式
         self.current_mode = None  # 'folder' or 'single'
         self.current_files = []
-        self.output_dir = None
+        self.output_dir = self.config.get('paths.output_dir', '') or None
 
         # 创建UI
         self._create_menu()
@@ -42,6 +58,11 @@ class MainWindow:
 
         # 默认显示文件夹模式
         self._show_folder_mode()
+
+        # 自动打开上次的文件夹
+        last_folder = self.config.get('paths.last_folder', '')
+        if last_folder and os.path.isdir(last_folder):
+            self.root.after(100, lambda: self._open_folder_path(last_folder))
 
     def _create_menu(self):
         """创建菜单栏"""
@@ -69,10 +90,15 @@ class MainWindow:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="工具", menu=tools_menu)
         tools_menu.add_command(label="批量重命名", command=self._batch_rename)
-        tools_menu.add_command(label="修复图片（带备份）", command=self._repair_with_dialog)
-        tools_menu.add_separator()
-        tools_menu.add_command(label="恢复上一次操作", command=self._restore_from_backup)
-        tools_menu.add_command(label="删除备份文件", command=self._delete_backups)
+        tools_menu.add_command(label="批量编辑元信息", command=self._batch_edit_metadata)
+        
+        # 修复子菜单
+        repair_menu = tk.Menu(tools_menu, tearoff=0)
+        tools_menu.add_cascade(label="修复操作", menu=repair_menu)
+        repair_menu.add_command(label="完整修复", command=self._repair_with_dialog)
+        repair_menu.add_separator()
+        repair_menu.add_command(label="仅修复后缀", command=lambda: self._repair_with_dialog(fix_extension=True, fix_time=False))
+        repair_menu.add_command(label="仅修复时间", command=lambda: self._repair_with_dialog(fix_extension=False, fix_time=True))
 
         # 帮助菜单
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -123,21 +149,21 @@ class MainWindow:
 
         ttk.Button(
             toolbar,
-            text="修复图片",
-            command=self._repair_with_dialog
+            text="编辑元信息",
+            command=self._batch_edit_metadata
         ).pack(side=tk.LEFT, padx=2)
 
-        ttk.Button(
-            toolbar,
-            text="恢复",
-            command=self._restore_from_backup
-        ).pack(side=tk.LEFT, padx=2)
-
-        ttk.Button(
-            toolbar,
-            text="删除备份",
-            command=self._delete_backups
-        ).pack(side=tk.LEFT, padx=2)
+        # 修复操作按钮组
+        repair_menu_btn = ttk.Menubutton(toolbar, text="修复操作")
+        repair_menu_btn.pack(side=tk.LEFT, padx=2)
+        
+        repair_menu = tk.Menu(repair_menu_btn, tearoff=0)
+        repair_menu.add_command(label="完整修复", command=self._repair_with_dialog)
+        repair_menu.add_separator()
+        repair_menu.add_command(label="仅修复后缀", command=lambda: self._repair_with_dialog(fix_extension=True, fix_time=False))
+        repair_menu.add_command(label="仅修复时间", command=lambda: self._repair_with_dialog(fix_extension=False, fix_time=True))
+        repair_menu.add_command(label="仅重命名", command=self._batch_rename)
+        repair_menu_btn.config(menu=repair_menu)
 
     def _create_main_content(self):
         """创建主内容区域"""
@@ -166,19 +192,46 @@ class MainWindow:
         self.single_view.show()
         self.current_mode = 'single'
 
+    def _on_close(self):
+        """关闭窗口"""
+        # 保存窗口大小
+        geometry = self.root.geometry()
+        try:
+            # 解析窗口大小（格式：WIDTHxHEIGHT+X+Y）
+            size_part = geometry.split('+')[0]
+            width, height = size_part.split('x')
+            self.config.set('window.width', int(width))
+            self.config.set('window.height', int(height))
+        except Exception:
+            pass
+
+        # 保存配置
+        self.config.save()
+
+        # 关闭窗口
+        self.root.destroy()
+
     def _open_folder(self):
         """打开文件夹"""
         folder_path = filedialog.askdirectory(title="选择图片文件夹")
         if folder_path:
-            self.current_files = get_image_files_in_folder(folder_path)
+            self._open_folder_path(folder_path)
 
-            if not self.current_files:
-                messagebox.showinfo("提示", "该文件夹中没有找到支持的图片文件")
-                return
+    def _open_folder_path(self, folder_path: str):
+        """打开指定文件夹"""
+        self.current_files = get_image_files_in_folder(folder_path)
 
-            self._show_folder_mode()
-            self.folder_view.load_folder(folder_path, self.current_files)
-            self._update_status(f"已加载 {len(self.current_files)} 张图片")
+        if not self.current_files:
+            messagebox.showinfo("提示", "该文件夹中没有找到支持的图片文件")
+            return
+
+        # 保存最后打开的文件夹
+        self.config.set('paths.last_folder', folder_path)
+        self.config.save()
+
+        self._show_folder_mode()
+        self.folder_view.load_folder(folder_path, self.current_files)
+        self._update_status(f"已加载 {len(self.current_files)} 张图片")
 
     def _open_single_image(self):
         """打开单个图片"""
@@ -204,6 +257,10 @@ class MainWindow:
             self.output_dir = output_dir
             self.output_dir_label.configure(text=f"输出: {output_dir}")
             self._update_status(f"输出目录已设置: {output_dir}")
+
+            # 保存输出目录配置
+            self.config.set('paths.output_dir', output_dir)
+            self.config.save()
 
     def _select_all(self):
         """全选"""
@@ -233,6 +290,51 @@ class MainWindow:
 
         # 打开重命名对话框
         self._show_rename_dialog(selected_files)
+
+    def _batch_edit_metadata(self):
+        """批量编辑元信息"""
+        if self.current_mode != 'folder':
+            messagebox.showinfo("提示", "请先打开文件夹")
+            return
+
+        selected_files = self.folder_view.get_selected_files()
+        if not selected_files:
+            messagebox.showinfo("提示", "请先选择要编辑的图片")
+            return
+
+        # 打开批量编辑对话框
+        from .batch_dialog import BatchMetadataDialog
+        dialog = BatchMetadataDialog(self.root, selected_files)
+        self.root.wait_window(dialog)
+
+        if dialog.result:
+            metadata = dialog.result
+
+            # 确认对话框
+            field_names = {
+                'title': '标题',
+                'description': '描述',
+                'artist': '作者',
+                'copyright': '版权',
+                'make': '相机品牌',
+                'model': '相机型号',
+            }
+
+            fields_text = "\n".join([f"- {field_names.get(k, k)}: {v}" for k, v in metadata.items()])
+            if not messagebox.askyesno("确认", f"确定要修改 {len(selected_files)} 张图片的元信息吗？\n\n{fields_text}"):
+                return
+
+            # 执行批量写入
+            def do_write():
+                return MetadataWriter.batch_write_metadata(
+                    selected_files,
+                    metadata,
+                    copy_mode=True,
+                    output_dir=self.output_dir,
+                    progress_callback=self._update_progress
+                )
+
+            self._execute_batch_operation(do_write, "批量编辑元信息")
 
     def _batch_fix_time(self):
         """批量修复时间"""
@@ -333,7 +435,7 @@ class MainWindow:
             "完整修复"
         )
 
-    def _repair_with_dialog(self):
+    def _repair_with_dialog(self, fix_extension: bool = True, fix_time: bool = True):
         """使用对话框修复图片"""
         if self.current_mode != 'folder':
             messagebox.showinfo("提示", "请先打开文件夹")
@@ -346,7 +448,7 @@ class MainWindow:
 
         # 打开修复对话框
         from .batch_dialog import RepairDialog
-        dialog = RepairDialog(self.root, selected_files, self.output_dir)
+        dialog = RepairDialog(self.root, selected_files, self.output_dir, fix_extension=fix_extension, fix_time=fix_time)
         self.root.wait_window(dialog)
 
         if dialog.result:
@@ -360,88 +462,14 @@ class MainWindow:
                     output_dir=result['output_dir'],
                     fix_extension=result['fix_extension'],
                     fix_time=result['fix_time'],
-                    progress_callback=self._update_progress
+                    progress_callback=self._update_progress,
+                    time_source=result.get('time_source', 'auto'),
+                    unprocessed_dir=result.get('unprocessed_dir')
                 )
 
             self._execute_batch_operation(do_repair, "修复图片")
 
-    def _delete_backups(self):
-        """删除备份文件"""
-        if self.current_mode != 'folder':
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
 
-        # 确定要删除的文件夹
-        folder_path = self.folder_view.folder_path
-        if not folder_path:
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
-
-        # 确认对话框
-        if not messagebox.askyesno("确认", f"确定要删除以下文件夹中的所有备份文件吗？\n\n{folder_path}\n\n备份文件后缀为 .res"):
-            return
-
-        # 执行删除
-        result = RepairEngine.delete_backups(folder_path)
-
-        # 显示结果
-        message = f"删除完成\n\n找到备份: {result['total']}\n成功删除: {result['deleted']}\n删除失败: {result['failed']}"
-
-        if result['deleted'] > 0:
-            message += "\n\n已删除文件:\n"
-            for f in result['files'][:10]:
-                message += f"- {os.path.basename(f)}\n"
-            if len(result['files']) > 10:
-                message += f"... 还有 {len(result['files']) - 10} 个文件"
-
-        messagebox.showinfo("完成", message)
-
-        # 刷新视图
-        if self.current_mode == 'folder':
-            self.folder_view.refresh()
-
-    def _restore_from_backup(self):
-        """从备份恢复"""
-        if self.current_mode != 'folder':
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
-
-        selected_files = self.folder_view.get_selected_files()
-        if not selected_files:
-            messagebox.showinfo("提示", "请先选择要恢复的图片")
-            return
-
-        # 检查是否有备份
-        files_with_backup = []
-        files_without_backup = []
-
-        for filepath in selected_files:
-            if RepairEngine.has_backup(filepath):
-                files_with_backup.append(filepath)
-            else:
-                files_without_backup.append(filepath)
-
-        if not files_with_backup:
-            messagebox.showinfo("提示", "选中的文件没有找到备份文件（.res后缀）")
-            return
-
-        # 确认对话框
-        message = f"找到 {len(files_with_backup)} 个备份文件\n"
-        if files_without_backup:
-            message += f"未找到备份: {len(files_without_backup)} 个\n"
-        message += f"\n确定要恢复吗？\n（将从 .res 备份文件恢复到原文件名）"
-
-        if not messagebox.askyesno("确认", message):
-            return
-
-        # 执行恢复
-        def do_restore():
-            return RepairEngine.batch_restore(
-                files_with_backup,
-                progress_callback=self._update_progress
-            )
-
-        self._execute_batch_operation(do_restore, "恢复备份")
 
     def _show_rename_dialog(self, files: List[str]):
         """显示重命名对话框"""
@@ -468,16 +496,30 @@ class MainWindow:
         progress_dialog = ProgressDialog(self.root, title=f"{operation_name}中...")
         self.progress_dialog = progress_dialog
 
+        # 用于存储取消标志
+        cancel_flag = threading.Event()
+
+        def cancel_callback():
+            """取消回调"""
+            cancel_flag.set()
+
+        progress_dialog.set_cancel_callback(cancel_callback)
+
         def run():
             try:
                 result = operation()
-                self.root.after(0, lambda: self._on_operation_complete(result, operation_name))
+
+                # 检查是否被取消
+                if cancel_flag.is_set():
+                    self.root.after(0, lambda: messagebox.showinfo("提示", f"{operation_name}已取消"))
+                else:
+                    self.root.after(0, lambda: self._on_operation_complete(result, operation_name))
             except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("错误", f"操作失败: {str(e)}"))
+                if not cancel_flag.is_set():
+                    self.root.after(0, lambda: messagebox.showerror("错误", f"操作失败: {str(e)}"))
             finally:
                 self.root.after(0, progress_dialog.destroy)
 
-        import threading
         thread = threading.Thread(target=run)
         thread.daemon = True
         thread.start()
@@ -489,6 +531,8 @@ class MainWindow:
 
     def _on_operation_complete(self, result: dict, operation_name: str):
         """操作完成"""
+        from ..utils.error_report import generate_error_report_from_batch_result, show_error_report_dialog
+
         # 处理不同格式的结果
         if 'success' in result and isinstance(result['success'], int):
             # 批量操作结果
@@ -496,23 +540,29 @@ class MainWindow:
             failed = result.get('failed', 0)
             total = result.get('total', 0)
             partial = result.get('partial', 0)
+            unprocessed = result.get('unprocessed', 0)
 
             message = f"{operation_name}完成\n\n成功: {success}\n失败: {failed}"
             if partial > 0:
                 message += f"\n部分成功: {partial}"
+            if unprocessed > 0:
+                message += f"\n未处理: {unprocessed} (非图片文件，已复制到未处理目录)"
             message += f"\n总计: {total}"
 
-            if failed > 0 and 'errors' in result:
-                message += "\n\n失败详情:\n"
-                for error in result['errors'][:5]:
-                    message += f"- {os.path.basename(error['file'])}: {error['message']}\n"
-                if len(result['errors']) > 5:
-                    message += f"... 还有 {len(result['errors']) - 5} 个错误"
+            # 生成错误报告
+            report = generate_error_report_from_batch_result(result, operation_name)
+
+            if report.has_errors() or report.has_warnings():
+                # 显示简要信息
+                messagebox.showinfo("完成", message)
+
+                # 显示详细错误报告
+                show_error_report_dialog(self.root, report)
+            else:
+                messagebox.showinfo("完成", message)
         else:
             # 单个操作结果
-            message = f"{operation_name}完成"
-
-        messagebox.showinfo("完成", message)
+            messagebox.showinfo("完成", f"{operation_name}完成")
 
         # 刷新视图
         if self.current_mode == 'folder':
@@ -555,31 +605,21 @@ class MainWindow:
    - 点击"批量重命名"
    - 设置重命名格式和输出目录
 
-4. 修复图片（带备份）:
+4. 修复图片:
    - 选择要修复的图片
    - 点击"修复图片"
    - 可选择修复后缀、修复时间
    - 可自定义重命名格式
-   - 修复前会自动备份原图（.res后缀）
+   - 可选择时间来源（自动、元数据、修改时间、创建时间）
    - GIF等无拍摄时间的格式会使用文件修改时间
 
-5. 恢复上一次操作:
-   - 选择已修复的图片
-   - 点击"恢复"
-   - 将从 .res 备份文件恢复原图
-
-6. 删除备份文件:
-   - 修复完成后，确认无问题
-   - 点击"删除备份"清理 .res 文件
-
-7. 输出目录:
+5. 输出目录:
    - 默认保存在原目录
    - 可以设置单独的输出目录
 
-8. 回滚机制:
-   - 每次修复前会自动创建 .res 备份
-   - 同一文件只保留一个备份，不重复创建
-   - 可随时通过"恢复"按钮恢复原图
+6. 操作提醒:
+   - 修复操作会修改文件，请在操作前备份重要数据
+   - 修复后的文件会保留原始文件的时间属性
 """
         messagebox.showinfo("使用说明", help_text)
 

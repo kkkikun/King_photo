@@ -2,6 +2,9 @@
 
 图片元信息编辑与修复工具
 
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 ## 功能特性
 
 ### 1. 编辑元信息
@@ -25,7 +28,7 @@
 | 格式 | EXIF | XMP | 说明 |
 |------|------|-----|------|
 | JPEG/JPG | ✅ | ✅ | 完整支持 |
-| PNG | ❌ | ✅ | tEXt/iTXt块 |
+| PNG | ❌ | ✅ | XMP命名空间（photoshop:DateCreated） |
 | GIF | ❌ | ❌ | 基本信息 |
 | WebP | ✅ | ✅ | RIFF容器 |
 | TIFF/TIF | ✅ | ✅ | 完整支持 |
@@ -78,7 +81,7 @@
 
 1. 克隆或下载项目
 ```bash
-git clone https://github.com/yourusername/King_photo.git
+git clone https://github.com/kkkikun/King_photo.git
 cd King_photo
 ```
 
@@ -175,12 +178,17 @@ King_photo/
 │       ├── __init__.py
 │       ├── constants.py        # 常量定义
 │       ├── helpers.py          # 工具函数
+│       ├── config_manager.py   # 配置管理
+│       ├── logging_config.py   # 日志配置
+│       ├── error_report.py     # 错误报告
 │       └── exiftool_wrapper.py # exiftool封装
-├── assets/                  # 图标等资源
 ├── tests/                   # 测试代码
+├── config/                  # 配置文件
 ├── requirements.txt         # 依赖
 ├── build.py                 # 打包脚本
 ├── run.py                   # 启动脚本
+├── DEVELOPMENT_RULES.md     # 开发规范
+├── PROJECT_STRUCTURE.md     # 项目结构说明
 ├── .gitignore
 └── README.md
 ```
@@ -196,6 +204,39 @@ King_photo/
 3. **输出目录**：可以设置单独的输出目录，否则保存在原目录
 
 4. **文件后缀修复**：通过读取文件头魔数检测真实格式，可能不是100%准确
+
+## 更新日志
+
+### v1.2.0 (2026-05-30)
+
+#### Bug Fixes
+- **ExifTool中文路径编码彻底修复**：Windows命令行传递中文路径时Perl运行时编码转换出错，导致路径被乱码。解决方案：将所有参数写入UTF-8编码的临时argfile，通过`-@ argfile`传递给ExifTool，完全绕过命令行编码问题
+- **PNG拍摄时间显示修复**：PNG文件的拍摄时间标准字段是`photoshop:DateCreated`（"Creation Time"），而非`exif:DateTimeOriginal`。同时写入多个XMP命名空间字段确保Windows资源管理器正确显示
+- **PIL文件识别错误处理改进**：损坏PNG文件导致PIL报错。在写入XMP前添加文件预检查（存在性、非空、PNG文件头验证）
+- **文件格式验证改进**：添加视频格式魔数检测，`is_truly_image()`方法验证文件类型
+- **缩略图加载错误处理优化**：提供更具体的错误信息，根据文件头判断文件类型
+
+#### New Features
+- **PNG Creation Time字段写入支持**：确保PNG文件的Creation Time字段（`XMP-photoshop:DateCreated`）被正确写入
+- **PNG XMP命名空间命令**：ExifTool写入PNG时使用正确的XMP命名空间（`-XMP-photoshop:DateCreated`、`-XMP-exif:DateTimeOriginal`、`-XMP-xmp:CreateDate`）
+- **未处理输出目录功能**：非图片文件自动复制到未处理目录
+- **HEIC和WebP格式支持**：添加WebP XMP写入功能，注册HEIC格式支持
+
+#### Improvements
+- **项目重构完成**：删除回滚机制、修复文件属性保护、灵活时间源选择、修复按钮拆分
+- **开发规范文档**：创建`DEVELOPMENT_RULES.md`和`PROJECT_STRUCTURE.md`
+- **日志系统改进**：按级别分类，错误信息在前，每次运行覆盖
+- **UI窗口大小修复**：RepairDialog和BatchMetadataDialog添加滚动机制
+
+### v1.1.0
+
+- 完整的 XMP 写入支持（PNG、SVG）
+- 统一日志系统
+- 配置文件持久化
+- 缩略图异步加载
+- 批量操作可取消
+- 错误汇总导出
+- 批量元信息编辑集成
 
 ## 许可证
 
