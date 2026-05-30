@@ -8,7 +8,7 @@ import sys
 import logging
 import importlib.util
 import json
-from typing import Optional, Dict, Any, List, Type, Union
+from typing import Optional, Dict, Any, List, Type
 
 from .plugin_interfaces import (
     IFormatPlugin,

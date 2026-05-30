@@ -5,7 +5,7 @@ King_photo - 插件接口定义
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 
 
 class IFormatPlugin(ABC):

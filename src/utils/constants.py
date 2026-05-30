@@ -192,3 +192,42 @@ TIME_PATTERNS = [
     (r'^(\d{10})$', 'timestamp'),
     (r'^(\d{13})$', 'timestamp'),
 ]
+
+# ===== 元数据字段映射 =====
+# 内部字段名 → ExifTool标签名（metadata_writer + exif_handler 共用）
+INTERNAL_TO_EXIFTOOL = {
+    'artist': 'Artist',
+    'copyright': 'Copyright',
+    'description': 'ImageDescription',
+    'make': 'Make',
+    'model': 'Model',
+    'software': 'Software',
+    'title': 'Title',
+    'keywords': 'Keywords',
+    'lens': 'LensModel',
+    'orientation': 'Orientation',
+    'exposure_time': 'ExposureTime',
+    'fnumber': 'FNumber',
+    'iso': 'ISO',
+    'focal_length': 'FocalLength',
+    'datetime': 'DateTimeOriginal',
+    'datetime_original': 'DateTimeOriginal',
+    'datetime_digitized': 'DateTimeDigitized',
+    'creation_time': 'CreateDate',
+}
+
+# 内部字段名 → IPTC标签名
+INTERNAL_TO_IPTC = {
+    'title': 'Title',
+    'description': 'Description',
+    'author': 'Author',
+    'copyright': 'Copyright',
+    'keywords': 'Keywords',
+}
+
+# 可通过 piexif 写入的字段名集合（恒等映射，仅需验证）
+PIEIXF_VALID_FIELDS = {
+    'artist', 'copyright', 'description', 'make', 'model',
+    'software', 'lens', 'orientation', 'exposure_time',
+    'fnumber', 'iso', 'focal_length',
+}

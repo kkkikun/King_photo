@@ -193,3 +193,238 @@ def _find_exiftool(self) -> str:
 
 ### 涉及文件
 - `src/utils/exiftool_wrapper.py`
+
+---
+
+## 错误 9：ExifTool 中文路径编码错误
+
+### 问题描述
+ExifTool 处理含中文路径的文件时报错，路径被乱码为类似 `ͼƬ����` 的内容，导致所有含中文路径的文件操作失败。
+
+### 错误原因
+Python subprocess 通过 Windows 命令行传递 Unicode 字符串时，ExifTool 的 Perl 运行时在 `GetCommandLineA()` → `GetCommandLineW()` 转换过程中编码不一致。
+
+### 解决方案
+将所有参数和文件路径写入 UTF-8 编码的临时 argfile，通过 `-@ argfile` 传递给 ExifTool，完全绕过命令行编码问题。
+
+### 关键代码
+```python
+# 新增方法
+def _build_exiftool_args(self, **kwargs) -> List[str]:
+    """构建参数列表"""
+    
+def _run_exiftool(self, filepath: str, args: List[str]) -> str:
+    """通过argfile运行ExifTool"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', 
+                                      delete=False, encoding='utf-8') as f:
+        for arg in args:
+            f.write(arg + '\n')
+        f.write(filepath + '\n')
+    # ... subprocess.run via -@ argfile
+```
+
+### 涉及文件
+- `src/utils/exiftool_wrapper.py`
+
+---
+
+## 错误 10：PNG 拍摄时间写入后 Windows 资源管理器不显示
+
+### 问题描述
+PNG 文件拍摄时间通过 ExifTool 写入后，Windows 资源管理器中不显示。
+
+### 错误原因
+PNG 文件的拍摄时间标准字段是 `photoshop:DateCreated`（"Creation Time"），代码只写入了 `exif:DateTimeOriginal`，且没有写全 XMP 命名空间命令。
+
+### 解决方案
+1. `xmp_handler.py` 字段映射改为 `photoshop:DateCreated`
+2. `exiftool_wrapper.py` 添加 PNG XMP 命名空间映射：
+   - `-XMP-photoshop:DateCreated=...`（拍摄时间）
+   - `-XMP-exif:DateTimeOriginal=...`（原始拍摄时间）
+   - `-XMP-xmp:CreateDate=...`（创建时间）
+3. `write_xmp_to_png()` 从 `img.info` 中移除旧 XMP 防止保留旧数据
+
+### 涉及文件
+- `src/core/xmp_handler.py`
+- `src/utils/exiftool_wrapper.py`
+- `src/utils/constants.py`
+
+---
+
+## 错误 11：PIL 无法识别损坏的 PNG 文件
+
+### 问题描述
+损坏的 PNG 文件导致 PIL `Image.open()` 抛出 "cannot identify image file" 错误。
+
+### 错误原因
+没有在打开文件前验证文件完整性。
+
+### 解决方案
+在 `xmp_handler.py` 的 `write_xmp_to_png()` 中添加文件预检查：
+- 检查文件是否存在
+- 检查文件是否非空
+- 验证 PNG 文件头（`89 50 4E 47 0D 0A 1A 0A`）
+
+### 涉及文件
+- `src/core/xmp_handler.py`
+
+---
+
+## 错误 12：metadata_reader/metadata_writer KeyError
+
+### 问题描述
+```python
+KeyError: 'needs_exiftool'
+```
+`metadata_reader.py:54` 和 `metadata_writer.py:90` 中使用 `format_info['needs_exiftool']` 直接访问字典键，但该键可能不存在。
+
+### 错误原因
+`FormatDetector.get_format_info()` 对某些格式不返回 `needs_exiftool` 字段。
+
+### 解决方案
+全部改用 `.get()` 方法设置默认值：
+```python
+# 修复前
+if format_info['needs_exiftool']:
+# 修复后
+if format_info.get('needs_exiftool', False):
+```
+
+### 涉及文件
+- `src/core/metadata_reader.py`
+- `src/core/metadata_writer.py`
+
+---
+
+## 错误 13：unified_api.py format_datetime 参数不匹配
+
+### 问题描述
+```python
+TypeError: format_datetime() takes 1 positional argument but 2 were given
+```
+`KingPhotoAPI.format_datetime()` 调用 `helpers.format_datetime(dt, format_str)` 但 `helpers.format_datetime` 只接受一个参数。
+
+### 错误原因
+API 层未适配 helpers 中的函数签名。
+
+### 解决方案
+```python
+# 修复后
+def format_datetime(self, dt, format_str=None):
+    if format_str:
+        return dt.strftime(format_str)
+    return format_datetime(dt)  # helpers单参版本
+```
+
+### 涉及文件
+- `src/api/unified_api.py`
+
+---
+
+## 错误 14：error_handler.py logger 未定义（NameError）
+
+### 问题描述
+`error_handler.py` 中多处调用 `logger.error()` / `logger.warning()`，但模块顶部未定义 `logger`，调用即抛出 `NameError`。
+
+### 错误原因
+遗漏了 `logger = logging.getLogger(__name__)` 声明。
+
+### 解决方案
+在模块顶部（import 语句后）添加：
+```python
+logger = logging.getLogger(__name__)
+```
+
+### 涉及文件
+- `src/utils/error_handler.py`
+
+---
+
+## 错误 15：测试字段名与实际 API 不匹配
+
+### 问题描述
+测试中使用 `supports_exif`、`supports_xmp`、`needs_exiftool` 检查 `get_format_info()` 返回值，但实际 API 返回 `exif_support`、`xmp_support`、`need_exiftool`。
+
+### 错误原因
+API 重构后字段名变更，测试未同步更新。
+
+### 解决方案
+将测试中的字段名更新为实际 API 返回的名称：
+```python
+assert info.get('exif_support') is True   # 原 supports_exif
+assert info.get('xmp_support') is True    # 原 supports_xmp
+assert info.get('need_exiftool') is False # 原 needs_exiftool
+```
+
+`get_editable_fields()` 测试需跳过 `_format_info` 开头的特殊项。
+
+### 涉及文件
+- `tests/test_format_detector.py`
+- `tests/test_metadata_reader.py`
+
+---
+
+## 错误 16：测试调用已删除的备份方法
+
+### 问题描述
+`test_repair_engine.py` 中 15 个测试调用已删除的方法（`get_backup_path`、`has_backup`、`create_backup` 等），全部失败。
+
+### 错误原因
+项目重构中删除了回滚机制，但对应测试未删除。
+
+### 解决方案
+删除 6 个备份相关测试类（142 行）：`TestBackupPath`、`TestHasBackup`、`TestCreateBackup`、`TestRestoreFromBackup`、`TestDeleteBackup`、`TestDeleteBackups`。
+
+### 涉及文件
+- `tests/test_repair_engine.py`
+
+---
+
+## 错误 17：exif_handler.py / metadata_writer.py 重复字段映射字典
+
+### 问题描述
+`exif_handler.py` 的 `field_mapping_et` 和 `metadata_writer.py` 的 `field_mapping` 在多个方法中重复定义，共 6 处重复。
+
+### 错误原因
+各方法独立定义映射字典，未提取公共常量。
+
+### 解决方案
+在 `constants.py` 新增统一映射常量：
+```python
+INTERNAL_TO_EXIFTOOL = {'artist': 'Artist', 'copyright': 'Copyright', ...}
+INTERNAL_TO_IPTC = {'title': 'Title', 'description': 'Description', ...}
+PIEIXF_VALID_FIELDS = {'artist', 'copyright', 'description', ...}
+```
+所有模块改为引用统一常量。
+
+### 涉及文件
+- `src/utils/constants.py`
+- `src/core/exif_handler.py`
+- `src/core/metadata_writer.py`
+
+---
+
+## 错误 18：batch_dialog.py 三个对话框重复实现滚动代码
+
+### 问题描述
+`RenameDialog`、`RepairDialog`、`BatchMetadataDialog` 各自重复 ~18 行 Canvas+Scrollbar 创建代码。
+
+### 错误原因
+未复用已有的 `ScrollableFrame` 组件。
+
+### 解决方案
+3 处全部替换为：
+```python
+sf = ScrollableFrame(self)
+sf.pack(fill=tk.BOTH, expand=True)
+main_frame = sf.scrollable_frame
+```
+
+### 涉及文件
+- `src/ui/batch_dialog.py`
+
+---
+
+> **文档版本**: 2.0  
+> **最后更新**: 2026-05-30  
+> **维护规则**: 每次修复错误后，必须在本文档中添加新记录

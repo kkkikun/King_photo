@@ -5,7 +5,7 @@ King_photo - 核心接口定义
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple, Union
+from typing import Optional, Dict, Any, List, Tuple
 
 
 class IFormatDetector(ABC):

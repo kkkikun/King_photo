@@ -6,7 +6,7 @@ import os
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import List, Optional, Dict
+from typing import List, Optional
 
 from .widgets import ThumbnailWidget, ImagePreviewWidget, MetadataEditorWidget
 from ..api import get_api
@@ -125,10 +125,8 @@ class FolderView(ttk.Frame):
             thumb.grid(row=row, column=col, padx=5, pady=5)
             self.thumbnails.append(thumb)
 
-            # 根据文件数量选择加载方式
             if use_async:
                 thumb.load_thumbnail_async()
-            # 同步加载会在ThumbnailWidget初始化时自动完成
 
         self._update_select_count()
 
@@ -210,6 +208,5 @@ class FolderView(ttk.Frame):
     def refresh(self):
         """刷新视图"""
         if self.folder_path:
-            from ..utils.helpers import get_image_files_in_folder
             self.files = get_image_files_in_folder(self.folder_path)
             self.load_folder(self.folder_path, self.files)

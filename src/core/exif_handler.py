@@ -3,18 +3,15 @@ King_photo - EXIF处理模块
 处理JPEG、TIFF等格式的EXIF元信息
 """
 
-import io
 import logging
-import struct
 import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 
 import piexif
 from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
 
-from ..utils.constants import EXIF_FIELDS, EXIF_TIME_FIELDS
+from ..utils.constants import EXIF_TIME_FIELDS, INTERNAL_TO_EXIFTOOL
 
 # 获取日志记录器
 logger = logging.getLogger(__name__)
@@ -180,33 +177,12 @@ class ExifHandler:
                 if et.is_available:
                     # 转换字段名（内部名 -> ExifTool标签名）
                     et_metadata = {}
-                    field_mapping_et = {
-                        'artist': 'Artist',           # EXIF:Artist
-                        'copyright': 'Copyright',     # EXIF:Copyright
-                        'description': 'ImageDescription',  # EXIF:ImageDescription
-                        'make': 'Make',               # EXIF:Make
-                        'model': 'Model',             # EXIF:Model
-                        'software': 'Software',       # EXIF:Software
-                        'title': 'Title',             # IPTC:Title / XMP:dc:title
-                        'keywords': 'Keywords',       # IPTC:Keywords / XMP:dc:subject
-                        'lens': 'LensModel',          # EXIF:LensModel
-                        'orientation': 'Orientation', # EXIF:Orientation
-                        'exposure_time': 'ExposureTime',  # EXIF:ExposureTime
-                        'fnumber': 'FNumber',         # EXIF:FNumber
-                        'iso': 'ISO',                 # EXIF:ISOSpeedRatings
-                        'focal_length': 'FocalLength',  # EXIF:FocalLength
-                        'datetime': 'DateTimeOriginal',        # -> 拍摄时间
-                        'datetime_original': 'DateTimeOriginal',  # -> 拍摄时间
-                        'datetime_digitized': 'DateTimeDigitized',  # -> 数字化时间
-                        'creation_time': 'CreateDate',  # -> 创建时间 (ExifTool标签名)
-                    }
-                    
                     for key, value in metadata.items():
                         key_lower = key.lower()
-                        if key_lower in field_mapping_et:
+                        if key_lower in INTERNAL_TO_EXIFTOOL:
                             if isinstance(value, datetime):
                                 value = value.strftime("%Y:%m:%d %H:%M:%S")
-                            et_metadata[field_mapping_et[key_lower]] = str(value)
+                            et_metadata[INTERNAL_TO_EXIFTOOL[key_lower]] = str(value)
                     
                     # 对于PNG，需要设置ModifyDate字段（xmp:ModifyDate）
                     if 'DateTimeOriginal' in et_metadata:
@@ -274,31 +250,12 @@ class ExifHandler:
                 if et.is_available:
                     # 转换字段名（内部名 -> ExifTool标签名）
                     et_metadata = {}
-                    field_mapping_et = {
-                        'artist': 'Artist',
-                        'copyright': 'Copyright',
-                        'description': 'ImageDescription',
-                        'make': 'Make',
-                        'model': 'Model',
-                        'software': 'Software',
-                        'lens': 'LensModel',
-                        'orientation': 'Orientation',
-                        'exposure_time': 'ExposureTime',
-                        'fnumber': 'FNumber',
-                        'iso': 'ISO',
-                        'focal_length': 'FocalLength',
-                        'datetime': 'DateTimeOriginal',
-                        'datetime_original': 'DateTimeOriginal',
-                        'datetime_digitized': 'DateTimeDigitized',
-                        'creation_time': 'CreateDate',
-                    }
-                    
                     for key, value in metadata.items():
                         key_lower = key.lower()
-                        if key_lower in field_mapping_et:
+                        if key_lower in INTERNAL_TO_EXIFTOOL:
                             if isinstance(value, datetime):
                                 value = value.strftime("%Y:%m:%d %H:%M:%S")
-                            et_metadata[field_mapping_et[key_lower]] = str(value)
+                            et_metadata[INTERNAL_TO_EXIFTOOL[key_lower]] = str(value)
                     
                     if et.write_metadata(filepath, et_metadata):
                         logger.info(f"使用exiftool成功写入EXIF信息: {filepath}")

@@ -224,22 +224,21 @@ class TestGetFormatInfo:
         """测试 JPG 格式信息"""
         info = FormatDetector.get_format_info(sample_jpg)
         assert info['format'] == 'JPEG'
-        assert info['supports_exif'] is True
-        assert info['supports_xmp'] is True
-        assert info['needs_exiftool'] is False
+        assert info.get('exif_support') is True
+        assert info.get('xmp_support') is True
+        assert info.get('need_exiftool') is False
 
     def test_png_format_info(self, sample_png):
         """测试 PNG 格式信息"""
         info = FormatDetector.get_format_info(sample_png)
         assert info['format'] == 'PNG'
-        assert info['supports_exif'] is False
-        assert info['supports_xmp'] is True
-        assert info['needs_exiftool'] is False
+        assert info.get('exif_support') is False
+        assert info.get('xmp_support') is True
+        assert info.get('need_exiftool') is False
 
     def test_unknown_format_info(self):
         """测试未知格式信息"""
         info = FormatDetector.get_format_info('test.xyz')
         assert info['format'] == 'Unknown'
-        assert info['supports_exif'] is False
-        assert info['supports_xmp'] is False
-        assert info['needs_exiftool'] is False
+        assert info.get('exif_support') is False
+        assert info.get('xmp_support') is False

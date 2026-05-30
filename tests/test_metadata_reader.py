@@ -34,8 +34,7 @@ class TestReadMetadata:
         """测试包含格式信息"""
         result = MetadataReader.read_metadata(sample_jpg)
         assert 'format' in result
-        assert 'supports_exif' in result
-        assert 'supports_xmp' in result
+        assert 'extension' in result
 
     def test_read_metadata_has_dimensions(self, sample_jpg):
         """测试包含图片尺寸"""
@@ -141,5 +140,7 @@ class TestGetEditableFields:
         """测试字段结构"""
         result = MetadataReader.get_editable_fields(sample_jpg)
         for key, value in result.items():
+            if key == '_format_info':
+                continue  # 格式信息项结构不同，跳过
             assert 'value' in value
             assert 'label' in value

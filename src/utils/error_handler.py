@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Callable, Type
 from enum import Enum
 
+# 获取日志记录器
+logger = logging.getLogger(__name__)
+
 
 class ErrorCode(Enum):
     """错误代码枚举"""

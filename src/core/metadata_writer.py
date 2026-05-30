@@ -14,6 +14,7 @@ from .exif_handler import ExifHandler
 from .xmp_handler import XmpHandler
 from ..utils.exiftool_wrapper import get_exiftool
 from ..utils.helpers import get_file_extension, get_unique_filename
+from ..utils.constants import INTERNAL_TO_EXIFTOOL, INTERNAL_TO_IPTC, PIEIXF_VALID_FIELDS
 from ..api.interfaces import IMetadataWriter
 
 # 获取日志记录器
@@ -142,28 +143,12 @@ class MetadataWriter(IMetadataWriter):
     def _write_exif_with_piexif(filepath: str, metadata: Dict[str, Any]) -> bool:
         """使用piexif写入EXIF信息"""
         try:
-            # 转换字段名（内部名 -> ExifHandler接受的名）
+            # 转换字段名（内部名 -> EXIF标签，恒等映射仅验证）
             exif_metadata = {}
-
-            field_mapping = {
-                'artist': 'artist',
-                'copyright': 'copyright',
-                'description': 'description',
-                'make': 'make',
-                'model': 'model',
-                'software': 'software',
-                'lens': 'lens',
-                'orientation': 'orientation',
-                'exposure_time': 'exposure_time',
-                'fnumber': 'fnumber',
-                'iso': 'iso',
-                'focal_length': 'focal_length',
-            }
-
             for key, value in metadata.items():
                 key_lower = key.lower()
-                if key_lower in field_mapping:
-                    exif_metadata[field_mapping[key_lower]] = str(value)
+                if key_lower in PIEIXF_VALID_FIELDS:
+                    exif_metadata[key_lower] = str(value)
 
             # 处理时间字段
             if 'datetime' in metadata:
@@ -206,28 +191,10 @@ class MetadataWriter(IMetadataWriter):
             # 转换字段名（内部名 -> ExifTool标签名）
             # ExifTool写入时自动选择最佳存储位置（EXIF/IPTC/XMP）
             et_metadata = {}
-
-            field_mapping = {
-                'artist': 'Artist',           # EXIF:Artist (Tag 315)
-                'copyright': 'Copyright',     # EXIF:Copyright (Tag 33432)
-                'description': 'ImageDescription',  # EXIF:ImageDescription (Tag 270)
-                'make': 'Make',               # EXIF:Make (Tag 271)
-                'model': 'Model',             # EXIF:Model (Tag 272)
-                'software': 'Software',       # EXIF:Software (Tag 305)
-                'title': 'Title',             # IPTC:Title / XMP:dc:title
-                'keywords': 'Keywords',       # IPTC:Keywords / XMP:dc:subject
-                'lens': 'LensModel',          # EXIF:LensModel (Tag 42036)
-                'orientation': 'Orientation', # EXIF:Orientation (Tag 274)
-                'exposure_time': 'ExposureTime',  # EXIF:ExposureTime (Tag 33434)
-                'fnumber': 'FNumber',         # EXIF:FNumber (Tag 33437)
-                'iso': 'ISO',                 # EXIF:ISOSpeedRatings (Tag 34855)
-                'focal_length': 'FocalLength',  # EXIF:FocalLength (Tag 37386)
-            }
-
             for key, value in metadata.items():
                 key_lower = key.lower()
-                if key_lower in field_mapping:
-                    et_metadata[field_mapping[key_lower]] = str(value)
+                if key_lower in INTERNAL_TO_EXIFTOOL:
+                    et_metadata[INTERNAL_TO_EXIFTOOL[key_lower]] = str(value)
 
             # 处理时间字段 - ExifTool的时间标签名
             # EXIF规范: DateTimeOriginal(36867), DateTimeDigitized(36868), DateTime(306)
@@ -297,28 +264,10 @@ class MetadataWriter(IMetadataWriter):
 
             # 转换字段名（内部名 -> ExifTool标签名）
             et_metadata = {}
-
-            field_mapping = {
-                'artist': 'Artist',           # EXIF:Artist (Tag 315)
-                'copyright': 'Copyright',     # EXIF:Copyright (Tag 33432)
-                'description': 'ImageDescription',  # EXIF:ImageDescription (Tag 270)
-                'make': 'Make',               # EXIF:Make (Tag 271)
-                'model': 'Model',             # EXIF:Model (Tag 272)
-                'software': 'Software',       # EXIF:Software (Tag 305)
-                'title': 'Title',             # IPTC:Title / XMP:dc:title
-                'keywords': 'Keywords',       # IPTC:Keywords / XMP:dc:subject
-                'lens': 'LensModel',          # EXIF:LensModel (Tag 42036)
-                'orientation': 'Orientation', # EXIF:Orientation (Tag 274)
-                'exposure_time': 'ExposureTime',  # EXIF:ExposureTime (Tag 33434)
-                'fnumber': 'FNumber',         # EXIF:FNumber (Tag 33437)
-                'iso': 'ISO',                 # EXIF:ISOSpeedRatings (Tag 34855)
-                'focal_length': 'FocalLength',  # EXIF:FocalLength (Tag 37386)
-            }
-
             for key, value in metadata.items():
                 key_lower = key.lower()
-                if key_lower in field_mapping:
-                    et_metadata[field_mapping[key_lower]] = str(value)
+                if key_lower in INTERNAL_TO_EXIFTOOL:
+                    et_metadata[INTERNAL_TO_EXIFTOOL[key_lower]] = str(value)
 
             # 处理时间字段
             if 'datetime' in metadata:
@@ -627,20 +576,12 @@ class MetadataWriter(IMetadataWriter):
             # 尝试使用exiftool写入IPTC数据
             et = get_exiftool()
             if et.is_available:
-                # 转换字段名（内部名 -> ExifTool标签名）
+                # 转换字段名（内部名 -> IPTC标签名）
                 iptc_metadata = {}
-                field_mapping = {
-                    'title': 'Title',
-                    'description': 'Description',
-                    'author': 'Author',
-                    'copyright': 'Copyright',
-                    'keywords': 'Keywords',
-                }
-                
                 for key, value in metadata.items():
                     key_lower = key.lower()
-                    if key_lower in field_mapping:
-                        iptc_metadata[field_mapping[key_lower]] = str(value)
+                    if key_lower in INTERNAL_TO_IPTC:
+                        iptc_metadata[INTERNAL_TO_IPTC[key_lower]] = str(value)
                 
                 return et.write_metadata(filepath, iptc_metadata)
             return False

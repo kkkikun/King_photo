@@ -21,7 +21,7 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.3.0
+**版本**: v1.3.1
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
@@ -57,7 +57,14 @@ King_photo/
 │   │   ├── folder_view.py        # 文件夹模式视图
 │   │   ├── single_view.py        # 单图片模式视图
 │   │   ├── batch_dialog.py       # 批量操作对话框
-│   │   └── widgets.py            # 自定义UI组件
+│   │   ├── widgets.py            # 组件兼容层
+│   │   └── widgets/               # UI子模块
+│   │       ├── __init__.py
+│   │       ├── thumbnail.py       # 缩略图组件
+│   │       ├── preview.py         # 图片预览组件
+│   │       ├── metadata.py        # 元数据编辑组件
+│   │       ├── progress.py        # 进度对话框
+│   │       └── scrollable.py      # 可滚动框架
 │   │
 │   ├── api/                      # 统一API层（v1.3.0新增）
 │   │   ├── __init__.py           # API模块初始化 + 公共导出
@@ -72,7 +79,6 @@ King_photo/
 │       ├── helpers.py            # 辅助函数
 │       ├── exiftool_wrapper.py   # ExifTool封装
 │       ├── config_manager.py     # 配置管理器
-│       ├── config_center.py      # 统一配置中心（v1.3.0新增）
 │       ├── error_handler.py      # 统一错误处理（v1.3.0新增）
 │       ├── logging_config.py     # 日志配置
 │       └── error_report.py       # 错误报告
@@ -118,6 +124,7 @@ King_photo/
 ├── README.md                     # 项目说明
 ├── PLUGIN_DOC.md                 # 插件开发文档（v1.3.0新增）
 ├── DEVELOPMENT_RULES.md          # 开发规则
+├── error_solutions.md            # 错误解决记录（18条）
 └── PROJECT_STRUCTURE.md          # 项目结构说明书（本文件）
 ```
 
@@ -383,23 +390,20 @@ King_photo/
 
 ---
 
-#### 5. widgets.py - 自定义UI组件
+#### 5. widgets/ — 自定义UI组件（v1.3.1 拆分子模块）
 
-**职责**: 可复用的UI组件
+**目录**: `src/ui/widgets/`
 
-**主要类**:
-| 类名 | 功能 |
-|------|------|
-| `ThumbnailWidget` | 缩略图组件 |
-| `ImagePreviewWidget` | 图片预览组件 |
-| `MetadataEditorWidget` | 元数据编辑器 |
-| `ProgressDialog` | 进度对话框 |
-| `ScrollableFrame` | 可滚动框架 |
+**子模块**:
+| 文件 | 类 | 行数 | 功能 |
+|------|-----|------|------|
+| `thumbnail.py` | `ThumbnailWidget` | ~270 | 缩略图组件，支持异步加载、错误类型识别 |
+| `preview.py` | `ImagePreviewWidget` | ~36 | 图片预览，自动缩放 |
+| `metadata.py` | `MetadataEditorWidget` | ~200 | 元数据编辑器，格式自适应字段、按类别分组 |
+| `progress.py` | `ProgressDialog` | ~85 | 进度对话框，支持取消操作 |
+| `scrollable.py` | `ScrollableFrame` | ~30 | 可滚动框架，鼠标滚轮支持 |
 
-**关键特性**:
-- `ThumbnailWidget`: 支持异步加载、错误显示、选择状态
-- `MetadataEditorWidget`: 格式自适应字段显示、按类别分组
-- `ProgressDialog`: 支持取消操作、进度回调
+**兼容层**: `src/ui/widgets.py` 作为 re-exporter，`from .widgets import X` 仍然可用。
 
 **代码行数**: ~700行
 
@@ -619,29 +623,7 @@ King_photo/
 
 ---
 
-#### 5. config_center.py - 统一配置中心（v1.3.0新增）
-
-**职责**: 统一配置管理，支持观察者模式和配置验证
-
-**主要类**:
-- `ConfigCenter`: 统一配置中心
-
-**关键方法**:
-| 方法 | 功能 |
-|------|------|
-| `get(key, default)` | 获取配置项（支持点号分隔层级） |
-| `set(key, value)` | 设置配置项 |
-| `save()` | 保存配置到文件 |
-| `load()` | 从文件加载配置 |
-| `add_observer(observer)` | 添加配置观察者 |
-| `remove_observer(observer)` | 移除配置观察者 |
-| `notify_observers(key, value)` | 通知配置变更 |
-
-**代码行数**: ~200行
-
----
-
-#### 6. error_handler.py - 统一错误处理（v1.3.0新增）
+#### 5. error_handler.py - 统一错误处理（v1.3.0新增）
 
 **职责**: 层次化错误类体系
 
@@ -664,7 +646,7 @@ KingPhotoError (基类)
 
 ---
 
-#### 7. logging_config.py - 日志配置
+#### 6. logging_config.py - 日志配置
 
 **职责**: 统一日志配置
 
@@ -680,7 +662,7 @@ KingPhotoError (基类)
 
 ---
 
-#### 8. error_report.py - 错误报告
+#### 7. error_report.py - 错误报告
 
 **职责**: 错误汇总和导出
 
@@ -1003,7 +985,8 @@ config.get('window.width', 1200)
 3. **查看元数据写入**: `src/core/metadata_writer.py`
 4. **查看修复流程**: `src/core/repair_engine.py`
 5. **查看UI主窗口**: `src/ui/app.py`
-6. **查看缩略图组件**: `src/ui/widgets.py` → `ThumbnailWidget`
+6. **查看缩略图组件**: `src/ui/widgets/thumbnail.py` → `ThumbnailWidget`
+12. **查看错误解决方案**: `error_solutions.md`（18条记录）
 7. **查看ExifTool集成**: `src/utils/exiftool_wrapper.py`
 8. **查看常量定义**: `src/utils/constants.py`
 9. **查看API接口**: `src/api/unified_api.py` (v1.3.0)

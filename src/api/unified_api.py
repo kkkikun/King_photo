@@ -6,7 +6,7 @@ King_photo - 统一API入口
 import os
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 
 from .interfaces import (
     IFormatDetector,

@@ -6,7 +6,6 @@ King_photo - 文件处理模块
 import logging
 import os
 import shutil
-from datetime import datetime
 from typing import Optional, Dict, Any, List, Callable
 
 from ..api.interfaces import IFileProcessor
@@ -17,7 +16,6 @@ from ..utils.helpers import (
     get_file_times,
     ensure_output_folder,
     get_unique_filename,
-    sanitize_filename
 )
 from ..utils.constants import DEFAULT_RENAME_FORMAT, ALL_EXTENSIONS
 

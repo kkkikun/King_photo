@@ -7,12 +7,12 @@ import os
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from typing import List, Optional
+from typing import List
 
 from .folder_view import FolderView
 from .single_view import SingleView
 from ..api import get_api
-from ..utils.helpers import get_image_files_in_folder, is_supported_image
+from ..utils.helpers import get_image_files_in_folder
 from ..utils.config_manager import get_config_manager
 
 # 获取日志记录器
@@ -335,106 +335,6 @@ class MainWindow:
                 )
 
             self._execute_batch_operation(do_write, "批量编辑元信息")
-
-    def _batch_fix_time(self):
-        """批量修复时间"""
-        if self.current_mode != 'folder':
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
-
-        selected_files = self.folder_view.get_selected_files()
-        if not selected_files:
-            messagebox.showinfo("提示", "请先选择要修复的图片")
-            return
-
-        # 确认对话框
-        if not messagebox.askyesno("确认", f"确定要修复 {len(selected_files)} 张图片的时间信息吗？\n（会先修复后缀，再修复时间）"):
-            return
-
-        # 先修复后缀，再修复时间
-        def fix_time_with_prefix():
-            # 先修复后缀
-            ext_result = self.api.batch_repair_extension(
-                selected_files,
-                self.output_dir,
-                self._update_progress
-            )
-            # 获取修复后缀后的文件列表
-            fixed_files = []
-            for detail in ext_result.get('details', []):
-                if detail['result'].get('success') and not detail['result'].get('skipped'):
-                    fixed_files.append(detail['result']['new_path'])
-                else:
-                    fixed_files.append(detail['file'])
-
-            # 再修复时间（使用repair_file方法，因为API没有batch_fix_time）
-            # 这里需要逐个修复时间，但为了简化，我们使用batch_repair
-            time_result = self.api.batch_repair(
-                fixed_files,
-                output_dir=self.output_dir,
-                fix_extension=False,
-                fix_time=True,
-                progress_callback=self._update_progress
-            )
-            return time_result
-
-        # 执行修复
-        self._execute_batch_operation(
-            fix_time_with_prefix,
-            "修复时间"
-        )
-
-    def _batch_fix_extension(self):
-        """批量修复后缀"""
-        if self.current_mode != 'folder':
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
-
-        selected_files = self.folder_view.get_selected_files()
-        if not selected_files:
-            messagebox.showinfo("提示", "请先选择要修复的图片")
-            return
-
-        # 确认对话框
-        if not messagebox.askyesno("确认", f"确定要修复 {len(selected_files)} 张图片的后缀吗？"):
-            return
-
-        # 执行修复
-        self._execute_batch_operation(
-            lambda: self.api.batch_repair_extension(
-                selected_files,
-                self.output_dir,
-                self._update_progress
-            ),
-            "修复后缀"
-        )
-
-    def _full_repair(self):
-        """完整修复"""
-        if self.current_mode != 'folder':
-            messagebox.showinfo("提示", "请先打开文件夹")
-            return
-
-        selected_files = self.folder_view.get_selected_files()
-        if not selected_files:
-            messagebox.showinfo("提示", "请先选择要修复的图片")
-            return
-
-        # 确认对话框
-        if not messagebox.askyesno("确认", f"确定要完整修复 {len(selected_files)} 张图片吗？\n（包括后缀修复和时间修复）"):
-            return
-
-        # 执行修复
-        self._execute_batch_operation(
-            lambda: self.api.batch_repair(
-                selected_files,
-                output_dir=self.output_dir,
-                fix_extension=True,
-                fix_time=True,
-                progress_callback=self._update_progress
-            ),
-            "完整修复"
-        )
 
     def _repair_with_dialog(self, fix_extension: bool = True, fix_time: bool = True):
         """使用对话框修复图片"""

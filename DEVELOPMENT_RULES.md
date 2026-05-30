@@ -15,6 +15,7 @@
 11. [性能优化规则](#性能优化规则)
 12. [安全规则](#安全规则)
 13. [项目结构查询规则](#项目结构查询规则)
+14. [错误文档规则](#错误文档规则)
 
 ---
 
@@ -1107,7 +1108,7 @@ def safe_file_operation(filepath, operation):
 | 插件系统开发 | `plugin_manager.py`, `plugin_interfaces.py` | api/ 目录 |
 | UI界面修改 | `app.py`, `widgets.py`, `batch_dialog.py` | ui/ 目录 |
 | ExifTool集成 | `exiftool_wrapper.py` | utils/ 目录 |
-| 配置管理 | `config_manager.py`, `config_center.py` | utils/ 目录 |
+| 配置管理 | `config_manager.py` | utils/ 目录 |
 | 日志系统 | `logging_config.py` | utils/ 目录 |
 
 ### 13.4 更新说明书规则
@@ -1162,6 +1163,49 @@ def safe_file_operation(filepath, operation):
 # 参考说明书中的代码示例和最佳实践
 ```
 
+
+
+---
+
+## 错误文档规则（v1.3.0新增）
+
+### 14.1 错误记录强制规则
+
+**规则：** 每次修复错误后，必须在 `error_solutions.md` 文件中添加新记录。
+
+**记录格式：** 每条记录必须包含以下字段：
+```markdown
+## 错误 N：简短描述
+
+### 问题描述
+（一句话描述现象）
+
+### 错误原因
+（根因分析）
+
+### 解决方案
+（修复方法 + 关键代码）
+
+### 涉及文件
+- `path/to/file.py`
+```
+
+### 14.2 查询规则
+
+**规则：** 遇到新错误时，优先在 `error_solutions.md` 中搜索相似问题。
+
+```python
+# 快速搜索：检查是否已有解决方案
+grep -i "关键词" error_solutions.md
+```
+
+### 14.3 维护规则
+
+- 每次修复错误后**立即**更新本文档，不可延后
+- 记录使用编号递增（错误 1, 2, 3...）
+- 同类问题可在已有条目中补充，不单独创建
+- 文档作为项目知识库的一部分纳入版本管理
+
 ---
 
 ## 附录
@@ -1203,6 +1247,6 @@ def safe_file_operation(filepath, operation):
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2026-05-29  
+**文档版本**: 2.0  
+**最后更新**: 2026-05-30  
 **维护者**: King_photo 开发团队

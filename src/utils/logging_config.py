@@ -8,7 +8,7 @@ import os
 import logging
 import atexit
 from datetime import datetime
-from typing import List, Dict
+from typing import List
 
 
 class CategorizedLogStorage:
@@ -136,14 +136,3 @@ def setup_logging(log_dir: str = None, log_level: int = logging.INFO):
     atexit.register(_log_storage.flush_to_file)
 
 
-def get_logger(name: str) -> logging.Logger:
-    """
-    获取指定名称的日志记录器
-
-    Args:
-        name: 日志记录器名称，通常使用模块名
-
-    Returns:
-        日志记录器实例
-    """
-    return logging.getLogger(name)

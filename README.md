@@ -204,7 +204,13 @@ King_photo/
 │   │   ├── folder_view.py   # 文件夹模式视图
 │   │   ├── single_view.py   # 单图片模式视图
 │   │   ├── batch_dialog.py  # 批量操作对话框
-│   │   └── widgets.py       # 自定义组件
+│   │   ├── widgets.py       # 组件兼容层（re-export）
+│   │   └── widgets/          # UI子模块
+│   │       ├── thumbnail.py  # 缩略图组件
+│   │       ├── preview.py    # 图片预览组件
+│   │       ├── metadata.py   # 元数据编辑组件
+│   │       ├── progress.py   # 进度对话框
+│   │       └── scrollable.py # 可滚动框架
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── metadata_reader.py  # 元信息读取引擎
@@ -219,7 +225,6 @@ King_photo/
 │       ├── constants.py        # 常量定义
 │       ├── helpers.py          # 工具函数
 │       ├── config_manager.py   # 配置管理
-│       ├── config_center.py    # 统一配置中心
 │       ├── error_handler.py    # 统一错误处理
 │       ├── logging_config.py   # 日志配置
 │       ├── error_report.py     # 错误报告
@@ -238,6 +243,7 @@ King_photo/
 ├── PLUGIN_DOC.md            # 插件开发文档
 ├── DEVELOPMENT_RULES.md     # 开发规范
 ├── PROJECT_STRUCTURE.md     # 项目结构说明
+├── error_solutions.md       # 错误解决记录（18条）
 ├── .gitignore
 └── README.md
 ```
@@ -256,13 +262,31 @@ King_photo/
 
 ## 更新日志
 
+### v1.3.1 (2026-05-30)
+
+#### Improvements
+- **代码优化**：删除 ~450行死代码（`config_center.py`、`get_logger()`、app.py 3个死方法）
+- **导入清理**：13个文件中移除未使用的导入（`Union`、`Path`、`Optional`、`time` 等）
+- **字段映射统一**：提取 `INTERNAL_TO_EXIFTOOL`、`INTERNAL_TO_IPTC` 等常量到 `constants.py`，消除 6处重复字典
+- **UI组件拆分**：`widgets.py`（642行）拆分为 5个子模块，每文件 30-270行
+- **滚动代码复用**：`batch_dialog.py` 中 3个对话框统一使用 `ScrollableFrame`，删除 ~54行重复代码
+- **错误文档**：创建 `error_solutions.md`（18条记录），写入开发规则，要求修复后必须记录
+
+#### Bug Fixes
+- `error_handler.py` — 修复 logger 未定义（NameError）
+- `metadata_reader.py` / `metadata_writer.py` — 修复 KeyError（`.get()` 默认值）
+- `unified_api.py` — 修复 format_datetime 参数不匹配
+- 15个过期备份测试删除，5个测试字段名更新
+
+#### Testing
+- 288 passed, 2 skipped, 0 failed
+
 ### v1.3.0 (2026-05-30)
 
 #### New Features
 - **统一API层**：`KingPhotoAPI` 类提供所有核心功能的编程接口，支持格式检测、元数据读写、文件修复、批量操作、插件管理
 - **插件系统**：支持格式插件、功能插件、扩展插件三种类型，通过 `PluginManager` 动态加载和注册，无需修改核心代码
 - **接口定义**：使用 Python ABC 定义 `IFormatDetector`、`IMetadataReader`、`IMetadataWriter`、`IRepairEngine`、`IFileProcessor` 等核心接口
-- **配置中心**：`ConfigCenter` 统一配置管理，支持观察者模式和配置验证
 - **错误处理体系**：层次化错误类（`KingPhotoError`、`FormatError`、`MetadataError`、`PluginError` 等）
 
 #### Improvements

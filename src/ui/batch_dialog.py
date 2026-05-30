@@ -5,10 +5,11 @@ King_photo - 批量操作对话框
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from typing import List, Optional
+from typing import List
 
 from ..utils.constants import RENAME_VARIABLES, DEFAULT_RENAME_FORMAT
 from ..api import get_api
+from .widgets.scrollable import ScrollableFrame
 
 
 class RenameDialog(tk.Toplevel):
@@ -45,24 +46,9 @@ class RenameDialog(tk.Toplevel):
 
     def _create_ui(self):
         """创建UI"""
-        # 主容器（带滚动）
-        main_canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=main_canvas.yview)
-        main_frame = ttk.Frame(main_canvas)
-
-        main_frame.bind(
-            "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
-        )
-
-        main_canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
-        main_canvas.configure(yscrollcommand=scrollbar.set)
-
-        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # 绑定鼠标滚轮
-        main_canvas.bind("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        sf = ScrollableFrame(self)
+        sf.pack(fill=tk.BOTH, expand=True)
+        main_frame = sf.scrollable_frame
 
         # 文件数量提示
         ttk.Label(
@@ -266,24 +252,9 @@ class RepairDialog(tk.Toplevel):
 
     def _create_ui(self):
         """创建UI"""
-        # 主容器（带滚动）
-        main_canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=main_canvas.yview)
-        main_frame = ttk.Frame(main_canvas)
-
-        main_frame.bind(
-            "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
-        )
-
-        main_canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
-        main_canvas.configure(yscrollcommand=scrollbar.set)
-
-        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # 绑定鼠标滚轮
-        main_canvas.bind("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        sf = ScrollableFrame(self)
+        sf.pack(fill=tk.BOTH, expand=True)
+        main_frame = sf.scrollable_frame
 
         # 文件数量提示
         ttk.Label(
@@ -492,24 +463,9 @@ class BatchMetadataDialog(tk.Toplevel):
 
     def _create_ui(self):
         """创建UI"""
-        # 主容器（带滚动）
-        main_canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=main_canvas.yview)
-        main_frame = ttk.Frame(main_canvas)
-
-        main_frame.bind(
-            "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
-        )
-
-        main_canvas.create_window((0, 0), window=main_frame, anchor=tk.NW)
-        main_canvas.configure(yscrollcommand=scrollbar.set)
-
-        main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # 绑定鼠标滚轮
-        main_canvas.bind("<MouseWheel>", lambda e: main_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        sf = ScrollableFrame(self)
+        sf.pack(fill=tk.BOTH, expand=True)
+        main_frame = sf.scrollable_frame
 
         # 文件数量提示
         ttk.Label(
