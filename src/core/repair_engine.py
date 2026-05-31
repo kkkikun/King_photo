@@ -220,7 +220,12 @@ class RepairEngine(IRepairEngine):
         unprocessed_dir: str = None
     ) -> Dict[str, Any]:
         """
-        修复文件
+        修复文件（新逻辑：先检查并修复后缀 → 再修复时间）
+
+        修复流程:
+        1. 检查文件真实格式 → 若后缀不匹配则先修复后缀
+        2. 在修正后缀后的文件上提取时间信息
+        3. 写入元数据时间 + 设置文件时间 + 按时间重命名
 
         Args:
             filepath: 源文件路径
@@ -237,311 +242,146 @@ class RepairEngine(IRepairEngine):
         if not os.path.exists(filepath):
             return {'success': False, 'message': '文件不存在'}
 
-        # 预先检查文件是否真的是图片格式
-        is_image, image_check_msg = FormatDetector.is_truly_image(filepath)
-        if not is_image:
-            # 检查是否是格式不匹配但仍然是图片格式的情况
-            header_format = FormatDetector.detect_by_header(filepath)
-            ext_format = FormatDetector.detect_by_extension(filepath)
-            
-            # 如果是格式不匹配但仍然是图片格式，继续处理（修复后缀）
-            if header_format and ext_format:
-                logger.info(f"文件格式不匹配，将尝试修复后缀: {filepath}, 文件头格式: {header_format}, 扩展名格式: {ext_format}")
-            else:
-                # 如果是真正的非图片格式（如视频），跳过处理
-                logger.warning(f"文件不是真正的图片格式: {filepath}, {image_check_msg}")
-                
-                # 如果指定了未处理输出目录，将文件复制到该目录
-                if unprocessed_dir:
-                    try:
-                        # 确保未处理输出目录存在
-                        ensure_output_folder(unprocessed_dir)
-                        
-                        # 复制文件到未处理目录
-                        filename = os.path.basename(filepath)
-                        dest_path = os.path.join(unprocessed_dir, filename)
-                        dest_path = get_unique_filename(dest_path)
-                        
-                        shutil.copy2(filepath, dest_path)
-                        logger.info(f"已将未处理文件复制到: {dest_path}")
-                        
-                        return {
-                            'success': False,
-                            'message': f'文件不是图片格式: {image_check_msg}',
-                            'skipped': True,
-                            'error_type': 'not_image_file',
-                            'error_detail': image_check_msg,
-                            'unprocessed_path': dest_path
-                        }
-                    except Exception as e:
-                        logger.error(f"复制未处理文件失败: {filepath}, 错误: {str(e)}")
-                
-                return {
-                    'success': False,
-                    'message': f'文件不是图片格式: {image_check_msg}',
-                    'skipped': True,
-                    'error_type': 'not_image_file',
-                    'error_detail': image_check_msg
-                }
-
-        # 记录原始文件属性（用于操作完成后恢复）
-        original_file_times = None
-        try:
-            stat = os.stat(filepath)
-            original_file_times = {
-                'created': datetime.fromtimestamp(stat.st_ctime),
-                'modified': datetime.fromtimestamp(stat.st_mtime),
-                'accessed': datetime.fromtimestamp(stat.st_atime),
-            }
-        except Exception as e:
-            logger.warning(f"记录文件属性失败: {filepath}, 错误: {str(e)}")
-
         # 确定输出目录
         if output_dir is None:
             output_dir = os.path.dirname(filepath)
         ensure_output_folder(output_dir)
 
-        # 验证文件格式是否与扩展名匹配
-        format_check = FormatDetector.get_real_format(filepath)
-        real_format, is_consistent = format_check
-        
-        if not is_consistent:
-            logger.warning(f"文件格式不匹配: {os.path.basename(filepath)}")
-            logger.info(f"文件头格式: {real_format}, 扩展名格式: {FormatDetector.detect_by_extension(filepath)}")
-            
-            # 如果不修复后缀，跳过处理
-            if not fix_extension:
-                return {
-                    'success': False,
-                    'message': f'文件格式不匹配，跳过处理',
-                    'skipped': True,
-                    'format_mismatch': True,
-                    'real_format': real_format,
-                    'extension_format': FormatDetector.detect_by_extension(filepath)
-                }
-            else:
-                logger.info(f"将修复文件后缀: {os.path.basename(filepath)}")
-                # 记录格式不匹配警告
-                logger.warning(f"文件格式不匹配，将自动修复后缀: {os.path.basename(filepath)}")
-
-        results = {
-            'extension': None,
-            'time': None,
-        }
-
+        results = {'extension': None, 'time': None}
         actual_path = filepath
 
-        # Step 2: 修复后缀
-        # 在修复前记录原始文件的时间信息
-        original_file_times = RepairEngine.get_file_times_info(actual_path) if fix_extension else None
-        
-        if fix_extension:
-            ext_result = RepairEngine.fix_extension(actual_path, output_dir)
+        # ============================================================
+        # Phase 1: 格式检测 + 后缀修复
+        # ============================================================
+        header_format = FormatDetector.detect_by_header(filepath)
+        ext_format = FormatDetector.detect_by_extension(filepath)
+
+        # 检查是否为视频文件
+        video_formats = ['MOV', 'MP4', 'AVI', 'WMV']
+        if header_format in video_formats:
+            # 视频文件 → 跳过或复制到未处理目录
+            logger.warning(f"文件是视频格式 ({header_format})，非图片: {filepath}")
+            if unprocessed_dir:
+                try:
+                    ensure_output_folder(unprocessed_dir)
+                    dest = get_unique_filename(os.path.join(unprocessed_dir, os.path.basename(filepath)))
+                    shutil.copy2(filepath, dest)
+                    return {'success': False, 'skipped': True, 'unprocessed': True,
+                            'message': f'视频文件已复制到未处理目录',
+                            'error_type': 'not_image_file'}
+                except Exception as e:
+                    pass
+            return {'success': False, 'skipped': True,
+                    'message': f'文件是视频格式 ({header_format})',
+                    'error_type': 'not_image_file'}
+
+        # 后缀修复: 如果文件头格式与扩展名不一致
+        needs_ext_fix = (header_format is not None and header_format != ext_format)
+
+        if needs_ext_fix and fix_extension:
+            logger.info(f"后缀不匹配: 文件头={header_format}, 扩展名={ext_format} → 修复中")
+            ext_result = RepairEngine.fix_extension(filepath, output_dir)
             results['extension'] = ext_result
             if ext_result['success'] and not ext_result.get('skipped'):
                 actual_path = ext_result['new_path']
-                # 修复后缀后，恢复原始文件的时间信息
-                if original_file_times:
-                    try:
-                        # 恢复修改时间和访问时间
-                        set_file_times(actual_path, original_file_times['modified'], set_created=False)
-                        # 在Windows上尝试恢复创建时间
-                        if os.name == 'nt':
-                            import ctypes
-                            from ctypes import wintypes
-                            
-                            # Windows API 常量
-                            GENERIC_WRITE = 0x40000000
-                            FILE_SHARE_READ = 0x00000001
-                            FILE_SHARE_WRITE = 0x00000002
-                            OPEN_EXISTING = 3
-                            FILE_ATTRIBUTE_NORMAL = 0x80
-                            
-                            # 打开文件
-                            kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-                            file_handle = kernel32.CreateFileW(
-                                actual_path,
-                                GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                None,
-                                OPEN_EXISTING,
-                                FILE_ATTRIBUTE_NORMAL,
-                                None
-                            )
-                            
-                            if file_handle != -1:
-                                try:
-                                    # 转换为Windows FILETIME
-                                    unix_timestamp = int(original_file_times['created'].timestamp())
-                                    epoc_diff = 116444736000000000
-                                    filetime = int((unix_timestamp * 10000000) + epoc_diff)
-                                    
-                                    # 设置文件创建时间
-                                    ctypes.windll.kernel32.SetFileTime(
-                                        file_handle,
-                                        ctypes.byref(ctypes.c_longlong(filetime)),  # 创建时间
-                                        None,  # 访问时间
-                                        None   # 修改时间
-                                    )
-                                finally:
-                                    kernel32.CloseHandle(file_handle)
-                        logger.info(f"已恢复原始文件时间信息: {actual_path}")
-                    except Exception as e:
-                        logger.warning(f"恢复文件时间信息失败: {actual_path}, 错误: {str(e)}")
+                logger.info(f"后缀已修复: {os.path.basename(actual_path)}")
+            elif ext_result.get('skipped'):
+                results['extension'] = {'success': True, 'skipped': True, 'message': '后缀无需修复'}
+        elif needs_ext_fix and not fix_extension:
+            # 需要修复但用户禁用了
+            results['extension'] = {'success': False, 'skipped': True,
+                                    'message': f'后缀不匹配但已禁用修复'}
+        else:
+            # 后缀正确，直接复制（如果需要输出到不同目录）
+            if output_dir != os.path.dirname(filepath):
+                actual_path = os.path.join(output_dir, os.path.basename(filepath))
+                actual_path = get_unique_filename(actual_path)
+                shutil.copy2(filepath, actual_path)
+            results['extension'] = {'success': True, 'skipped': True, 'message': '后缀正确'}
 
-        # Step 3: 提取时间并重命名
-        if fix_time:
+        # ============================================================
+        # Phase 2: 时间修复（基于已修正后缀的文件）
+        # ============================================================
+        if fix_time and os.path.exists(actual_path):
+            # 重新检测格式（后缀可能已修改，需要用新格式的方法写时间）
+            current_format = FormatDetector.detect_by_header(actual_path)
+            if not current_format:
+                current_format = FormatDetector.detect_by_extension(actual_path)
+            logger.info(f"时间修复阶段，文件格式: {current_format}, 路径: {os.path.basename(actual_path)}")
+
             time_info = RepairEngine.extract_time_info(actual_path, time_source)
             file_times = RepairEngine.get_file_times_info(actual_path)
 
-            # 获取要使用的时间
+            # 获取最佳时间
             photo_dt = time_info['best_match']
-
-            # 如果没有拍摄时间，使用文件修改时间
             if photo_dt is None:
                 photo_dt = file_times['modified']
                 time_info['source'] = 'file_modified'
                 logger.info(f"未找到拍摄时间，使用文件修改时间: {photo_dt}")
-                
-                # 尝试将文件修改时间写入EXIF（对于不支持EXIF的格式如GIF，这会失败但不影响后续操作）
-                exif_write_result = MetadataWriter.write_metadata_from_filetime(actual_path, copy_mode=False)
-                if exif_write_result['success']:
-                    logger.info(f"成功将文件修改时间写入EXIF: {actual_path}")
-                else:
-                    logger.info(f"无法将文件修改时间写入EXIF（可能格式不支持）: {actual_path}")
 
             if photo_dt:
                 ext = os.path.splitext(actual_path)[1].lower()
-
-                # 生成新文件名
                 original_name = os.path.splitext(os.path.basename(actual_path))[0]
 
-                # 读取元数据用于重命名
-                metadata = MetadataReader.read_metadata(actual_path)
-                metadata['datetime'] = photo_dt
-
-                new_filename = generate_renamed_filename(
-                    original_name, rename_format, metadata, 1, ext
-                )
-
-                new_filepath = os.path.join(output_dir, new_filename)
-                new_filepath = get_unique_filename(new_filepath)
+                # 生成新文件名
+                rename_meta = MetadataReader.read_metadata(actual_path)
+                rename_meta['datetime'] = photo_dt
+                new_filename = generate_renamed_filename(original_name, rename_format, rename_meta, 1, ext)
+                new_filepath = get_unique_filename(os.path.join(output_dir, new_filename))
 
                 try:
-                    # 复制修复后的文件
                     shutil.copy2(actual_path, new_filepath)
-                    
-                    # 先写入元数据（此操作会修改文件，重置修改时间）
-                    metadata = {
+
+                    # 写入元数据时间
+                    time_metadata = {
                         'datetime': photo_dt,
                         'datetime_original': photo_dt,
                         'datetime_digitized': photo_dt,
                         'creation_time': photo_dt
                     }
-                    
-                    write_result = MetadataWriter.write_metadata(new_filepath, metadata, copy_mode=False)
-                    if not write_result['success']:
-                        logger.warning(f"写入元数据时间失败: {new_filepath}, 错误: {write_result.get('message')}")
+                    write_result = MetadataWriter.write_metadata(new_filepath, time_metadata, copy_mode=False)
+                    if write_result['success']:
+                        logger.info(f"元数据时间写入成功: {os.path.basename(new_filepath)}")
+                    else:
+                        logger.warning(f"元数据时间写入失败: {os.path.basename(new_filepath)}, {write_result.get('message')}")
 
-                    # 再修改文件时间（包括创建时间）- 必须在元数据写入之后，因为写入元数据会修改文件重置修改时间
+                    # 设置文件系统时间（创建时间 + 修改时间）
                     set_file_times(new_filepath, photo_dt, set_created=True)
 
-                    # 删除Step 2创建的中间文件（如果存在且不是原始文件）
+                    # 删除中间文件
                     if actual_path != filepath and os.path.exists(actual_path) and os.path.exists(new_filepath):
                         try:
                             os.remove(actual_path)
-                            logger.info(f"已删除中间文件: {actual_path}")
-                        except Exception as e:
-                            logger.warning(f"删除中间文件失败: {actual_path}, 错误: {str(e)}")
+                        except Exception:
+                            pass
 
                     results['time'] = {
                         'success': True,
                         'new_path': new_filepath,
                         'datetime': photo_dt,
                         'source': time_info['source'],
-                        'message': f'时间修复成功'
+                        'message': '时间修复成功'
                     }
                     actual_path = new_filepath
+
                 except Exception as e:
-                    logger.error(f"重命名失败: {filepath}, 错误: {str(e)}")
-                    results['time'] = {
-                        'success': False,
-                        'message': f'重命名失败: {str(e)}',
-                        'error_type': 'rename_failed',
-                        'error_detail': str(e)
-                    }
+                    logger.error(f"时间修复失败: {actual_path}, {e}")
+                    results['time'] = {'success': False, 'message': str(e)}
             else:
-                results['time'] = {
-                    'success': False,
-                    'message': '无法获取时间信息'
-                }
+                results['time'] = {'success': False, 'message': '无法获取时间信息'}
 
-        # 判断整体是否成功（提前计算，用于恢复文件属性逻辑）
-        operation_success = True
-        if fix_extension and results['extension'] and not results['extension']['success'] and not results['extension'].get('skipped'):
-            operation_success = False
-        if fix_time and results['time'] and not results['time']['success']:
-            operation_success = False
-
-        # 恢复原始文件属性（如果操作成功且没有修复时间）
-        # 注意：如果修复时间成功，文件属性会被修改为新时间，所以只恢复非时间修复的情况
-        if original_file_times and operation_success:
-            # 如果没有修复时间，或者时间修复失败，恢复原始文件属性
-            if not fix_time or (results.get('time') and not results['time'].get('success')):
-                try:
-                    # 恢复修改时间和访问时间
-                    set_file_times(actual_path, original_file_times['modified'], set_created=False)
-                    
-                    # 在Windows上尝试恢复创建时间
-                    if os.name == 'nt':
-                        import ctypes
-                        from ctypes import wintypes
-                        
-                        # Windows API 常量
-                        GENERIC_WRITE = 0x40000000
-                        FILE_SHARE_READ = 0x00000001
-                        FILE_SHARE_WRITE = 0x00000002
-                        OPEN_EXISTING = 3
-                        FILE_ATTRIBUTE_NORMAL = 0x80
-                        
-                        # 打开文件
-                        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-                        file_handle = kernel32.CreateFileW(
-                            actual_path,
-                            GENERIC_WRITE,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            None,
-                            OPEN_EXISTING,
-                            FILE_ATTRIBUTE_NORMAL,
-                            None
-                        )
-                        
-                        if file_handle != -1:
-                            try:
-                                # 转换为Windows FILETIME
-                                unix_timestamp = int(original_file_times['created'].timestamp())
-                                epoc_diff = 116444736000000000
-                                filetime = int((unix_timestamp * 10000000) + epoc_diff)
-                                
-                                # 设置文件创建时间
-                                ctypes.windll.kernel32.SetFileTime(
-                                    file_handle,
-                                    ctypes.byref(ctypes.c_longlong(filetime)),  # 创建时间
-                                    None,  # 访问时间
-                                    None   # 修改时间
-                                )
-                            finally:
-                                kernel32.CloseHandle(file_handle)
-                    
-                    logger.info(f"已恢复原始文件属性: {actual_path}")
-                except Exception as e:
-                    logger.warning(f"恢复文件属性失败: {actual_path}, 错误: {str(e)}")
+        # ============================================================
+        # 判断结果
+        # ============================================================
+        ext_ok = (not fix_extension) or (results['extension'] and results['extension'].get('success'))
+        time_ok = (not fix_time) or (results['time'] and results['time'].get('success'))
+        operation_success = ext_ok and time_ok
 
         return {
             'success': operation_success,
             'details': results,
             'output_path': actual_path,
-            'message': '修复成功' if operation_success else '部分修复失败'
+            'message': '修复完成' if operation_success else '部分修复失败'
         }
 
     @staticmethod
@@ -590,8 +430,13 @@ class RepairEngine(IRepairEngine):
                 progress_callback(i + 1, len(file_list), os.path.basename(filepath))
 
             result = RepairEngine.repair(
-                filepath, rename_format, output_dir,
-                fix_extension, fix_time, time_source, unprocessed_dir
+                filepath=filepath,
+                output_dir=output_dir,
+                fix_extension=fix_extension,
+                fix_time=fix_time,
+                time_source=time_source,
+                rename_format=rename_format,
+                unprocessed_dir=unprocessed_dir
             )
 
             if result.get('skipped', False):

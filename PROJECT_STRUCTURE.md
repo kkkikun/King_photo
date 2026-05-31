@@ -21,15 +21,17 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.3.1
+**版本**: v1.4.0
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
 2. 批量重命名（支持20+变量）
-3. 文件修复（后缀修复、时间修复）
-4. 格式支持：JPEG、PNG、GIF、WebP、TIFF、HEIC、RAW、AVIF、SVG等
-5. **统一API层**：编程方式访问所有功能（v1.3.0新增）
-6. **插件系统**：动态扩展格式和功能支持（v1.3.0新增）
+3. 文件修复（后缀修复、时间修复）+ **格式不匹配智能检测**（v1.4.0）
+4. 交互式预览（适配窗口 + 自由缩放 + 拖拽平移）
+5. 格式支持：JPEG、PNG、GIF、WebP、TIFF、HEIC、RAW、AVIF、SVG等
+6. **统一API层**：编程方式访问所有功能（v1.3.0）
+7. **插件系统**：动态扩展格式和功能支持（v1.3.0）
+8. **多格式图片加载器**：HEIC/AVIF/JXL/SVG/RAW 智能回退（v1.4.0）
 
 ---
 
@@ -39,61 +41,62 @@
 King_photo/
 ├── src/                          # 源代码目录
 │   ├── __init__.py               # 包初始化
-│   ├── main.py                   # 程序入口
+│   ├── main.py                   # 程序入口（ttkbootstrap主题初始化 + image_loader可用性报告）
 │   │
 │   ├── core/                     # 核心业务逻辑 ⬅ 实现 I* 接口
 │   │   ├── __init__.py
-│   │   ├── format_detector.py    # 格式检测器 (IFormatDetector)
+│   │   ├── format_detector.py    # 格式检测器 (IFormatDetector) — ftyp box灵活检测
 │   │   ├── metadata_reader.py    # 元数据读取引擎 (IMetadataReader)
 │   │   ├── metadata_writer.py    # 元数据写入引擎 (IMetadataWriter)
 │   │   ├── exif_handler.py       # EXIF处理
 │   │   ├── xmp_handler.py        # XMP处理
-│   │   ├── repair_engine.py      # 修复引擎 (IRepairEngine)
+│   │   ├── repair_engine.py      # 修复引擎 (IRepairEngine) — 先后缀→再时间
 │   │   └── file_processor.py     # 文件处理器 (IFileProcessor)
 │   │
 │   ├── ui/                       # 用户界面 ⬅ 通过 get_api() 访问
 │   │   ├── __init__.py
-│   │   ├── app.py                # 主应用窗口
-│   │   ├── folder_view.py        # 文件夹模式视图
+│   │   ├── app.py                # 主应用窗口（快捷键+工具提示+主题切换+格式检测流程）
+│   │   ├── folder_view.py        # 文件夹模式视图（适配窗口预览+信息面板）
 │   │   ├── single_view.py        # 单图片模式视图
 │   │   ├── batch_dialog.py       # 批量操作对话框
+│   │   ├── format_mismatch_dialog.py # 格式不匹配交互对话框 v1.4.0
 │   │   ├── widgets.py            # 组件兼容层
 │   │   └── widgets/               # UI子模块
 │   │       ├── __init__.py
-│   │       ├── thumbnail.py       # 缩略图组件
-│   │       ├── preview.py         # 图片预览组件
+│   │       ├── thumbnail.py       # 缩略图组件（image_loader统一加载）
+│   │       ├── preview.py         # 图片预览组件（适配+自由缩放+拖拽 v1.4.0）
 │   │       ├── metadata.py        # 元数据编辑组件
 │   │       ├── progress.py        # 进度对话框
 │   │       └── scrollable.py      # 可滚动框架
 │   │
-│   ├── api/                      # 统一API层（v1.3.0新增）
-│   │   ├── __init__.py           # API模块初始化 + 公共导出
+│   ├── api/                      # 统一API层（v1.3.0）
+│   │   ├── __init__.py
 │   │   ├── interfaces.py         # 核心接口定义（ABC抽象类）
-│   │   ├── plugin_interfaces.py  # 插件接口定义（IFormat/IFunction/IExtension）
-│   │   ├── unified_api.py        # KingPhotoAPI 统一入口（get_api/reset_api）
-│   │   └── plugin_manager.py     # 插件管理器（加载/注册/管理）
+│   │   ├── plugin_interfaces.py  # 插件接口定义
+│   │   ├── unified_api.py        # KingPhotoAPI 统一入口
+│   │   └── plugin_manager.py     # 插件管理器
 │   │
 │   └── utils/                    # 工具函数
 │       ├── __init__.py
 │       ├── constants.py          # 常量定义
 │       ├── helpers.py            # 辅助函数
-│       ├── exiftool_wrapper.py   # ExifTool封装
+│       ├── exiftool_wrapper.py   # ExifTool封装（argfile中文路径方案）
 │       ├── config_manager.py     # 配置管理器
-│       ├── error_handler.py      # 统一错误处理（v1.3.0新增）
+│       ├── error_handler.py      # 统一错误处理
 │       ├── logging_config.py     # 日志配置
-│       └── error_report.py       # 错误报告
+│       ├── error_report.py       # 错误报告
+│       ├── image_loader.py       # 统一图片加载器 v1.4.0
+│       └── format_impact.py      # 格式影响查询 v1.4.0
 │
-├── plugins/                      # 插件目录（v1.3.0新增）
+├── plugins/                      # 插件目录（v1.3.0）
 │   ├── formats/                  # 格式插件（PNG、HEIC、WebP、JPEG）
 │   ├── functions/                # 功能插件（批量重命名、批量修复、批量导出）
 │   ├── extensions/               # 扩展插件（水印等）
 │   └── plugin_config.json        # 插件配置文件
 │
-├── assets/                       # 资源文件
-│   └── icons/                    # 图标资源
-│
 ├── config/                       # 配置文件目录
-│   └── settings.json             # 用户配置
+│   ├── settings.json             # 用户配置（含 ui.theme）
+│   └── format_impact.json        # 格式影响规则 v1.4.0
 │
 ├── logs/                         # 日志文件目录
 │   └── king_photo_YYYY-MM-DD.log
@@ -966,13 +969,13 @@ config.get('window.width', 1200)
 
 | 模块 | 文件数 | 代码行数（估计） |
 |------|--------|------------------|
-| core/ | 7 | ~2,700行 |
-| ui/ | 5 | ~3,000行 |
+| core/ | 7 | ~2,500行 |
+| ui/ | 6 + 5 widgets | ~3,500行 |
 | api/ | 4 | ~1,500行 |
 | plugins/ | 8 | ~500行 |
-| utils/ | 8 | ~1,800行 |
+| utils/ | 10 | ~2,300行 |
 | 入口/测试 | 15 | ~2,000行 |
-| **总计** | **47** | **~11,500行** |
+| **总计** | **55** | **~12,300行** |
 
 ---
 
@@ -1015,6 +1018,7 @@ config.get('window.width', 1200)
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2026-05-29  
+**文档版本**: 1.1  
+**最后更新**: 2026-05-31  
+**对应项目版本**: v1.4.0  
 **维护者**: King_photo 开发团队

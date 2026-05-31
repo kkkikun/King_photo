@@ -204,10 +204,11 @@ King_photo/
 │   │   ├── folder_view.py   # 文件夹模式视图
 │   │   ├── single_view.py   # 单图片模式视图
 │   │   ├── batch_dialog.py  # 批量操作对话框
+│   │   ├── format_mismatch_dialog.py # 格式不匹配交互对话框 v1.4.0
 │   │   ├── widgets.py       # 组件兼容层（re-export）
 │   │   └── widgets/          # UI子模块
 │   │       ├── thumbnail.py  # 缩略图组件
-│   │       ├── preview.py    # 图片预览组件
+│   │       ├── preview.py    # 图片预览（适配+缩放+拖拽 v1.4.0）
 │   │       ├── metadata.py   # 元数据编辑组件
 │   │       ├── progress.py   # 进度对话框
 │   │       └── scrollable.py # 可滚动框架
@@ -219,7 +220,7 @@ King_photo/
 │   │   ├── xmp_handler.py      # XMP处理
 │   │   ├── file_processor.py   # 文件处理
 │   │   ├── repair_engine.py    # 修复引擎
-│   │   └── format_detector.py  # 格式检测
+│   │   └── format_detector.py  # 格式检测（ftyp box灵活检测）
 │   └── utils/
 │       ├── __init__.py
 │       ├── constants.py        # 常量定义
@@ -228,7 +229,9 @@ King_photo/
 │       ├── error_handler.py    # 统一错误处理
 │       ├── logging_config.py   # 日志配置
 │       ├── error_report.py     # 错误报告
-│       └── exiftool_wrapper.py # exiftool封装
+│       ├── exiftool_wrapper.py # exiftool封装
+│       ├── image_loader.py     # 统一图片加载器 v1.4.0
+│       └── format_impact.py    # 格式影响查询 v1.4.0
 ├── plugins/                  # 插件目录（v1.3.0 新增）
 │   ├── formats/              # 格式插件（PNG、HEIC、WebP）
 │   ├── functions/            # 功能插件（批量重命名、批量修复）
@@ -236,6 +239,8 @@ King_photo/
 │   └── plugin_config.json    # 插件配置
 ├── tests/                   # 测试代码
 ├── config/                  # 配置文件
+│   ├── settings.json        # 用户配置
+│   └── format_impact.json   # 格式影响规则 v1.4.0
 ├── requirements.txt         # 依赖
 ├── api_example.py           # API使用示例
 ├── build.py                 # 打包脚本
@@ -261,6 +266,33 @@ King_photo/
 4. **文件后缀修复**：通过读取文件头魔数检测真实格式，可能不是100%准确
 
 ## 更新日志
+
+### v1.4.0 (2026-05-31)
+
+#### New Features
+- **格式不匹配智能检测**：修复时自动检测文件头与扩展名不一致的图片（如 HEIC 伪装成 PNG）
+- **交互式格式修复对话框**：双缩略图对比（当前伪装 vs 修正后），影响分级提示（CRITICAL/HIGH/MEDIUM/LOW/NONE），支持"之后都按此处理"批量决策
+- **统一图片加载器** (`image_loader.py`)：多格式支持（HEIC/AVIF/JXL/SVG/RAW），智能回退链（PIL→专用加载器→插件注册→占位图）
+- **可缩放预览组件**：默认适配窗口 + 自由缩放（滚轮 0.05x~20x）+ 拖拽平移 + 重置按钮
+- **格式影响数据库** (`format_impact.json`)：20+条规则，5级影响评级，`format_impact.py` 查询 API
+- **格式检测增强**：ftyp box 灵活检测，正确识别 HEIC/HEIF/AVIF/MOV/MP4
+
+#### Improvements
+- **修复引擎重构**：先检查并修复后缀 → 再按正确格式写入时间，避免格式错判导致时间写入失败
+- **预览体验**：预览区权重 1→3（占比 60%），信息面板 height 8→12 行，暗色主题背景
+- **快捷键标注**：所有菜单项显示对应快捷键
+- **状态栏增强**：模式指示 📁/🖼️ + 进度条
+- **缩略图组件**：改用统一 image_loader 加载，支持更多格式缩略图
+
+#### Bug Fixes
+- HEIC/HEIF 魔数检测不准确（固定字节匹配→ftyp box 解析）
+- `batch_repair()` 参数顺序错误（改用关键字参数）
+- 对话框 `LabelFrame(padding=)` 在 ttkbootstrap 中不兼容
+- `folder_view.py` 缺少 `get_image_files_in_folder` 导入
+- 预览组件滚轮与缩略图滚轮冲突（`bind_all`→`bind`）
+
+#### Testing
+- 288 passed, 2 skipped, 0 failed
 
 ### v1.3.1 (2026-05-30)
 

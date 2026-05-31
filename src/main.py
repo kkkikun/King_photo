@@ -19,7 +19,7 @@ except ImportError:
     pass
 
 from src.utils.logging_config import setup_logging
-from src.ui.app import MainWindow
+from src.utils.config_manager import get_config
 
 
 def main():
@@ -28,7 +28,17 @@ def main():
     setup_logging()
 
     try:
-        app = MainWindow()
+        import ttkbootstrap as ttk
+
+        # 从配置读取主题，默认 darkly
+        theme = get_config('ui.theme', 'darkly')
+        root = ttk.Window(
+            title="King_photo - 图片元信息编辑与修复工具",
+            themename=theme
+        )
+
+        from src.ui.app import MainWindow
+        app = MainWindow(root)
         app.run()
     except Exception as e:
         print(f"程序启动失败: {e}")

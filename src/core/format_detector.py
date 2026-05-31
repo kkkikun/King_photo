@@ -20,6 +20,44 @@ class FormatDetector(IFormatDetector):
     _custom_formats: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
+    def _detect_ftyp_format(header: bytes) -> Optional[str]:
+        """
+        检测基于 ftyp box 的格式（HEIF/HEIC/AVIF/MOV/MP4）
+        ftyp box 格式: [4字节size][ftyp][4字节brand][可选:兼容brands...]
+        """
+        if len(header) < 12 or header[4:8] != b'ftyp':
+            return None
+
+        brand = header[8:12]
+
+        # HEIC/HEIF 品牌
+        heif_brands = [b'heic', b'heix', b'heim', b'heis', b'hevc', b'hevx', b'heif']
+        if brand in heif_brands:
+            return 'HEIF'
+
+        # AVIF 品牌
+        if brand in [b'avif', b'avis']:
+            return 'AVIF'
+
+        # mif1 可能同时是 HEIF 或 AVIF 容器
+        if brand == b'mif1':
+            # 检查兼容品牌列表中是否包含 avif
+            if len(header) >= 20:
+                compat = header[16:20]
+                if compat == b'avif':
+                    return 'AVIF'
+            return 'HEIF'
+
+        # MOV/MP4 视频格式
+        video_brands = [b'qt  ', b'MSNV', b'mp42']
+        if brand in video_brands:
+            return 'MOV'
+        if brand.startswith(b'mp4'):
+            return 'MP4'
+
+        return None
+
+    @staticmethod
     def detect_by_header(filepath: str) -> Optional[str]:
         """通过文件头检测真实格式"""
         try:
@@ -29,8 +67,17 @@ class FormatDetector(IFormatDetector):
             if not header:
                 return None
 
-            # 检查各种格式的魔数
+            # 优先检查 ftyp box 格式（HEIF/HEIC/AVIF/MOV/MP4）
+            # 这些格式有共同的 box 结构，需要特殊处理
+            ftyp_format = FormatDetector._detect_ftyp_format(header)
+            if ftyp_format:
+                return ftyp_format
+
+            # 检查各种格式的魔数（非ftyp类型）
             for format_name, signatures in FILE_SIGNATURES.items():
+                # 跳过 ftyp 类型的格式，已经单独处理
+                if format_name in ('MOV', 'MP4'):
+                    continue
                 for sig in signatures:
                     if header.startswith(sig):
                         # 特殊处理WebP（需要检查WEBP标记）

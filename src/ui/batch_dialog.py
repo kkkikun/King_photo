@@ -4,8 +4,10 @@ King_photo - 批量操作对话框
 
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox
 from typing import List
+
+import ttkbootstrap as ttk
 
 from ..utils.constants import RENAME_VARIABLES, DEFAULT_RENAME_FORMAT
 from ..api import get_api

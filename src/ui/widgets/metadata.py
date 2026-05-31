@@ -4,7 +4,8 @@ King_photo - 元数据编辑组件
 
 import logging
 import tkinter as tk
-from tkinter import ttk
+
+import ttkbootstrap as ttk
 from typing import Callable
 
 from ...api import get_api

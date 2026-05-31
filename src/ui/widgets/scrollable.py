@@ -4,7 +4,8 @@ King_photo - 可滚动框架组件
 
 import logging
 import tkinter as tk
-from tkinter import ttk
+
+import ttkbootstrap as ttk
 
 logger = logging.getLogger(__name__)
 

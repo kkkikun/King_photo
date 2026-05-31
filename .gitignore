@@ -40,3 +40,18 @@ jpg文件问题/
 
 # Generated reports
 *.md.bak
+
+# Planning & analysis documents (local only)
+UI优化建议.md
+格式检测交互式修复计划书.md
+模块化重构计划书.md
+项目重构计划书.md
+error_analysis.md
+以下是修正后的版本.md
+
+# Test output artifacts
+{datetime}/
+修复结果/
+fix_test/
+fix_v2/
+修复测试结果/

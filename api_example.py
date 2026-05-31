@@ -1,15 +1,16 @@
 """
-King_photo API 使用示例
-演示如何使用新的模块化API
+King_photo API 使用示例（v1.4.0）
+演示如何使用模块化API — 包括格式检测、元数据读写、修复、格式影响查询、图片加载
 """
 
 import os
 import sys
 
-# 添加项目根目录到sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.api import KingPhotoAPI, get_api
+from src.utils.image_loader import load_image, get_available_formats
+from src.utils.format_impact import get_impact, should_prompt_user
 
 
 def example_basic_usage():
@@ -162,6 +163,46 @@ def example_configuration():
     print("配置已保存")
 
 
+def example_format_impact():
+    """格式影响查询示例（v1.4.0）"""
+    print("\n=== 格式影响查询 ===")
+    
+    # HEIC 伪装成 PNG → CRITICAL
+    impact = get_impact("HEIF", "PNG")
+    print("  HEIF→PNG: level={}, recommend_fix={}".format(impact['level'], impact['recommend_fix']))
+    print("    {}".format(impact['reason']))
+    
+    # PNG 伪装成 JPEG → HIGH（透明通道丢失）
+    impact2 = get_impact("PNG", "JPEG")
+    print("  PNG→JPEG: level={}, recommend_fix={}".format(impact2['level'], impact2['recommend_fix']))
+    
+    # MOV 伪装成 JPG → NONE（不应修复）
+    impact3 = get_impact("MOV", "JPEG")
+    print("  MOV→JPEG: level={}, recommend_fix={}".format(impact3['level'], impact3['recommend_fix']))
+    
+    # 检查是否需要弹窗
+    print("  should_prompt(HEIF,PNG) = {}".format(should_prompt_user("HEIF", "PNG")))  # True
+    print("  should_prompt(JPEG,PNG) = {}".format(should_prompt_user("JPEG", "PNG")))  # False
+
+
+def example_image_loader():
+    """图片加载器示例（v1.4.0）"""
+    print("\n=== 图片加载器 ===")
+    
+    fmt = get_available_formats()
+    print("  可用格式: {}".format({k: v for k, v in fmt.items() if v}))
+    
+    # 示例：加载图片
+    test_file = os.path.join(os.path.dirname(__file__), "test", "sample.jpg")
+    if os.path.exists(test_file):
+        img, err = load_image(test_file)
+        if img:
+            print("  加载成功: {}x{}".format(img.width, img.height))
+            img.close()
+        else:
+            print("  加载失败: {}".format(err))
+
+
 def main():
     """主函数"""
     print("King_photo API 使用示例")
@@ -174,6 +215,10 @@ def main():
         example_batch_operations()
         example_plugin_operations()
         example_configuration()
+        
+        # v1.4.0 新增
+        example_format_impact()
+        example_image_loader()
         
         print("\n" + "=" * 50)
         print("所有示例执行完成")

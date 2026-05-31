@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
 
     # 界面设置
     'ui': {
+        'theme': 'darkly',
         'thumbnail_size': 120,
         'columns': 4,
         'async_threshold': 20,

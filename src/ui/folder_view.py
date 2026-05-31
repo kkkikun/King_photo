@@ -5,11 +5,15 @@ King_photo - 文件夹模式视图
 import os
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+from tkinter.ttk import PanedWindow
 from typing import List, Optional
+
+import ttkbootstrap as ttk
 
 from .widgets import ThumbnailWidget, ImagePreviewWidget, MetadataEditorWidget
 from ..api import get_api
+from ..utils.helpers import format_file_size, format_datetime, get_image_files_in_folder
 from ..utils.helpers import format_file_size, format_datetime
 
 # 异步加载阈值：文件数量超过此值时使用异步加载
@@ -36,7 +40,7 @@ class FolderView(ttk.Frame):
     def _create_ui(self):
         """创建UI"""
         # 主分割面板
-        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.paned = PanedWindow(self, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
 
         # 左侧：缩略图列表
@@ -70,22 +74,23 @@ class FolderView(ttk.Frame):
         self.thumbnail_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.thumbnail_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 绑定鼠标滚轮
-        self.thumbnail_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        # 绑定鼠标滚轮 — 仅缩略图区域
+        self.thumbnail_canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.thumbnail_canvas.bind("<Enter>", lambda e: self.thumbnail_canvas.focus_set())
 
         # 右侧：预览和信息
         right_frame = ttk.Frame(self.paned)
-        self.paned.add(right_frame, weight=1)
+        self.paned.add(right_frame, weight=3)
 
-        # 图片预览
-        self.preview = ImagePreviewWidget(right_frame, max_size=(300, 300))
-        self.preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # 图片预览 — fill available space but leave room for info
+        self.preview = ImagePreviewWidget(right_frame, max_size=(600, 500))
+        self.preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=(5, 0))
 
-        # 信息显示
+        # 信息显示 — fixed height at bottom
         info_frame = ttk.LabelFrame(right_frame, text="图片信息")
-        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        info_frame.pack(fill=tk.BOTH, padx=5, pady=5)
 
-        self.info_text = tk.Text(info_frame, height=10, wrap=tk.WORD)
+        self.info_text = tk.Text(info_frame, height=12, wrap=tk.WORD)
         self.info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
     def show(self):

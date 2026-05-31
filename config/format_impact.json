@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "impact_levels": {
+    "CRITICAL": {"recommend_fix": true, "reason": "格式伪装导致文件完全不可用或严重功能损失"},
+    "HIGH":     {"recommend_fix": true, "reason": "格式伪装导致特性丢失，影响正常使用"},
+    "MEDIUM":   {"recommend_fix": false, "reason": "格式伪装造成轻微不便，但文件仍可正常打开"},
+    "LOW":      {"recommend_fix": false, "reason": "格式伪装几乎无影响"},
+    "NONE":     {"recommend_fix": false, "reason": "真实格式非图片，修复后缀反而不利"}
+  },
+  "rules": [
+    {"real": "GIF",   "disguised": "JPEG", "impact": "CRITICAL", "reason": "GIF 动画帧完全丢失，JPEG不支持动画"},
+    {"real": "GIF",   "disguised": "PNG",  "impact": "CRITICAL", "reason": "GIF 动画帧完全丢失"},
+    {"real": "GIF",   "disguised": "WebP", "impact": "CRITICAL", "reason": "GIF 动画帧可能丢失"},
+    {"real": "GIF",   "disguised": "HEIF", "impact": "CRITICAL", "reason": "GIF 动画丢失 + HEIC 解码器兼容问题"},
+    
+    {"real": "HEIF",  "disguised": "JPEG", "impact": "CRITICAL", "reason": "HEIC 需专用解码器，伪装为JPEG后几乎所有软件无法打开"},
+    {"real": "HEIF",  "disguised": "PNG",  "impact": "CRITICAL", "reason": "HEIC 需专用解码器，PNG查看器无法解码"},
+    {"real": "HEIF",  "disguised": "WebP", "impact": "CRITICAL", "reason": "HEIC 需专用解码器"},
+    {"real": "HEIF",  "disguised": "GIF",  "impact": "CRITICAL", "reason": "HEIC 需专用解码器"},
+    {"real": "AVIF",  "disguised": "JPEG", "impact": "CRITICAL", "reason": "AVIF 需专用解码器"},
+    {"real": "AVIF",  "disguised": "PNG",  "impact": "CRITICAL", "reason": "AVIF 需专用解码器"},
+    
+    {"real": "PNG",   "disguised": "JPEG", "impact": "HIGH",  "reason": "PNG 透明通道丢失，JPEG不支持透明"},
+    {"real": "PNG",   "disguised": "HEIF", "impact": "HIGH",  "reason": "HEIC 解码器可能失败"},
+    {"real": "PNG",   "disguised": "GIF",  "impact": "MEDIUM", "reason": "失去PNG无损压缩优势"},
+    {"real": "PNG",   "disguised": "WebP", "impact": "MEDIUM", "reason": "兼容性因查看器而异"},
+    
+    {"real": "JPEG",  "disguised": "PNG",  "impact": "MEDIUM", "reason": "PNG查看器可正常解码JPEG，但格式标签误导"},
+    {"real": "JPEG",  "disguised": "GIF",  "impact": "MEDIUM", "reason": "静态图伪装成动图格式"},
+    {"real": "JPEG",  "disguised": "HEIF", "impact": "HIGH",  "reason": "HEIC 解码器尝试解析失败"},
+    {"real": "JPEG",  "disguised": "WebP", "impact": "LOW",   "reason": "现代查看器通用兼容"},
+    
+    {"real": "WebP",  "disguised": "JPEG", "impact": "HIGH",  "reason": "部分旧软件不支持WebP，无法打开"},
+    {"real": "WebP",  "disguised": "PNG",  "impact": "MEDIUM", "reason": "PNG查看器通常支持WebP"},
+    {"real": "WebP",  "disguised": "GIF",  "impact": "MEDIUM", "reason": "WebP动画兼容性不如GIF"},
+    {"real": "WebP",  "disguised": "HEIF", "impact": "HIGH",  "reason": "双重解码兼容问题"},
+    
+    {"real": "TIFF",  "disguised": "JPEG", "impact": "HIGH",  "reason": "多页TIFF丢失后续页，16位色深降级"},
+    {"real": "TIFF",  "disguised": "PNG",  "impact": "MEDIUM", "reason": "多页丢失，单页影响小"},
+    
+    {"real": "SVG",   "disguised": "PNG",  "impact": "MEDIUM", "reason": "矢量变标量，失去无损缩放"},
+    {"real": "PSD",   "disguised": "JPEG", "impact": "MEDIUM", "reason": "PSD图层全部丢失"},
+    
+    {"real": "BMP",   "disguised": "*",    "impact": "LOW",   "reason": "BMP无压缩，所有查看器通用兼容"},
+    {"real": "ICO",   "disguised": "*",    "impact": "LOW",   "reason": "图标格式通用兼容"},
+    
+    {"real": "MOV",   "disguised": "*",    "impact": "NONE",  "reason": "视频文件，修复扩展名会从图片文件夹消失。建议移至未处理目录"},
+    {"real": "MP4",   "disguised": "*",    "impact": "NONE",  "reason": "视频文件，同上"},
+    {"real": "AVI",   "disguised": "*",    "impact": "NONE",  "reason": "视频文件，同上"},
+    {"real": "WMV",   "disguised": "*",    "impact": "NONE",  "reason": "视频文件，同上"}
+  ]
+}

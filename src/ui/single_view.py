@@ -4,8 +4,11 @@ King_photo - 单图片模式视图
 
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+from tkinter.ttk import PanedWindow
 from typing import Optional
+
+import ttkbootstrap as ttk
 
 from .widgets import ImagePreviewWidget, MetadataEditorWidget
 from ..api import get_api
@@ -29,7 +32,7 @@ class SingleView(ttk.Frame):
     def _create_ui(self):
         """创建UI"""
         # 主分割面板
-        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.paned = PanedWindow(self, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
 
         # 左侧：图片预览

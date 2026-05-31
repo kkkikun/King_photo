@@ -4,7 +4,9 @@ King_photo - 进度对话框组件
 
 import logging
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+
+import ttkbootstrap as ttk
 
 logger = logging.getLogger(__name__)
 
