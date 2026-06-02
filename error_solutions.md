@@ -425,6 +425,43 @@ main_frame = sf.scrollable_frame
 
 ---
 
-> **文档版本**: 2.0  
-> **最后更新**: 2026-05-30  
+## 错误 19：鼠标滚轮滚动失效
+
+### 问题描述
+自适应框架修改后，鼠标滚动失效。具体表现：
+1. 初始修复后，窗口调整大小时滚动正常，但鼠标悬停在缩略图上时滚动仍然失效
+
+### 错误原因
+1. 第一次修复：`<Configure>` 事件不仅在窗口调整大小时触发，在滚动时也会触发，导致防抖机制不断重置定时器，干扰滚轮事件处理
+2. 第二次修复：鼠标悬停在子控件（缩略图）上时，滚轮事件不会冒泡到 Canvas
+
+### 解决方案
+1. 第一次修复：在 `_on_canvas_resize()` 中添加宽度检查，只有宽度真正变化时才触发重排
+2. 第二次修复：采用"鼠标进入滚动区域→bind_all，离开→unbind_all"模式，确保鼠标悬停在子控件上时滚轮事件仍能被捕获
+
+### 关键代码
+```python
+# 宽度检查（第一次修复）
+def _on_canvas_resize(self, event):
+    current_width = self.thumbnail_canvas.winfo_width()
+    if current_width == self.last_canvas_width:
+        return
+    self.last_canvas_width = current_width
+    # ... 防抖逻辑
+
+# 滚轮事件管理（第二次修复）
+def _on_canvas_enter(self, event):
+    self.thumbnail_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+def _on_canvas_leave(self, event):
+    self.thumbnail_canvas.unbind_all("<MouseWheel>")
+```
+
+### 涉及文件
+- `src/ui/folder_view.py`
+
+---
+
+> **文档版本**: 2.1  
+> **最后更新**: 2026-06-02  
 > **维护规则**: 每次修复错误后，必须在本文档中添加新记录

@@ -42,6 +42,7 @@ class FolderView(ttk.Frame):
         self.debounce_id = None
         self.current_cols = 0  # 记录当前列数，避免不必要的重排
         self.thumb_positions = {}  # 记录每个缩略图的位置 {index: (row, col)}
+        self.last_canvas_width = 0  # 记录上次画布宽度，用于判断是否真正调整大小
         
         # 初始化统一API
         self.api = get_api()
@@ -85,9 +86,9 @@ class FolderView(ttk.Frame):
         self.thumbnail_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.thumbnail_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 绑定鼠标滚轮 — 仅缩略图区域
-        self.thumbnail_canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.thumbnail_canvas.bind("<Enter>", lambda e: self.thumbnail_canvas.focus_set())
+        # 绑定鼠标滚轮 — 使用bind_all确保鼠标悬停在子控件上时也能滚动
+        self.thumbnail_canvas.bind("<Enter>", self._on_canvas_enter)
+        self.thumbnail_canvas.bind("<Leave>", self._on_canvas_leave)
         
         # 绑定画布大小变化事件，用于自适应列数
         self.thumbnail_canvas.bind("<Configure>", self._on_canvas_resize)
@@ -190,6 +191,13 @@ class FolderView(ttk.Frame):
     
     def _on_canvas_resize(self, event):
         """画布大小变化时重新排列缩略图（带防抖）"""
+        # 只有宽度变化时才触发重排，避免滚动时误触发
+        current_width = self.thumbnail_canvas.winfo_width()
+        if current_width == self.last_canvas_width:
+            return
+        
+        self.last_canvas_width = current_width
+        
         # 取消之前的定时器
         if self.debounce_id:
             self.after_cancel(self.debounce_id)
@@ -239,6 +247,14 @@ class FolderView(ttk.Frame):
     def _update_select_count(self):
         """更新选择计数"""
         self.select_count_label.configure(text=f"已选: {len(self.selected_files)}")
+
+    def _on_canvas_enter(self, event):
+        """鼠标进入画布区域时绑定全局滚轮事件"""
+        self.thumbnail_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+    def _on_canvas_leave(self, event):
+        """鼠标离开画布区域时解绑全局滚轮事件"""
+        self.thumbnail_canvas.unbind_all("<MouseWheel>")
 
     def _on_mousewheel(self, event):
         """鼠标滚轮"""
