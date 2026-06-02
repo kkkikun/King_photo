@@ -19,6 +19,12 @@ from ..utils.helpers import format_file_size, format_datetime
 # 异步加载阈值：文件数量超过此值时使用异步加载
 ASYNC_THRESHOLD = 20
 
+# 缩略图配置
+THUMBNAIL_WIDTH = 140  # 每个缩略图占用的总宽度（包括间距）
+MIN_COLS = 1
+MAX_COLS = 10
+SAFETY_MARGIN = 30  # 安全边距，确保不会截断
+
 
 class FolderView(ttk.Frame):
     """文件夹模式视图"""
@@ -31,6 +37,11 @@ class FolderView(ttk.Frame):
         self.files = []
         self.thumbnails = []
         self.selected_files = set()
+        
+        # 防抖相关
+        self.debounce_id = None
+        self.current_cols = 0  # 记录当前列数，避免不必要的重排
+        self.thumb_positions = {}  # 记录每个缩略图的位置 {index: (row, col)}
         
         # 初始化统一API
         self.api = get_api()
@@ -77,6 +88,9 @@ class FolderView(ttk.Frame):
         # 绑定鼠标滚轮 — 仅缩略图区域
         self.thumbnail_canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.thumbnail_canvas.bind("<Enter>", lambda e: self.thumbnail_canvas.focus_set())
+        
+        # 绑定画布大小变化事件，用于自适应列数
+        self.thumbnail_canvas.bind("<Configure>", self._on_canvas_resize)
 
         # 右侧：预览和信息
         right_frame = ttk.Frame(self.paned)
@@ -111,9 +125,11 @@ class FolderView(ttk.Frame):
         for widget in self.thumbnail_frame.winfo_children():
             widget.destroy()
         self.thumbnails.clear()
+        self.thumb_positions.clear()
 
-        # 创建缩略图
-        cols = 4  # 每行4个
+        # 计算初始列数
+        cols = self._calculate_cols()
+        self.current_cols = cols
         use_async = len(files) > ASYNC_THRESHOLD
 
         for i, filepath in enumerate(files):
@@ -129,11 +145,57 @@ class FolderView(ttk.Frame):
             )
             thumb.grid(row=row, column=col, padx=5, pady=5)
             self.thumbnails.append(thumb)
+            self.thumb_positions[i] = (row, col)
 
             if use_async:
                 thumb.load_thumbnail_async()
 
         self._update_select_count()
+    
+    def _calculate_cols(self) -> int:
+        """根据画布宽度计算应该显示的列数"""
+        canvas_width = self.thumbnail_canvas.winfo_width()
+        if canvas_width <= 1:
+            canvas_width = self.thumbnail_canvas.winfo_reqwidth()
+        
+        # 减去滚动条宽度和安全边距
+        available_width = canvas_width - 20 - SAFETY_MARGIN
+        # 使用整除确保不会超出，保守计算
+        cols = max(MIN_COLS, min(MAX_COLS, available_width // THUMBNAIL_WIDTH))
+        return cols
+    
+    def _rearrange_thumbnails(self):
+        """重新排列缩略图到正确的网格位置"""
+        if not self.thumbnails:
+            return
+        
+        cols = self._calculate_cols()
+        
+        # 只有列数真正变化时才重排
+        if cols == self.current_cols:
+            return
+        
+        self.current_cols = cols
+        
+        # 只更新位置真正变化的缩略图
+        for i, thumb in enumerate(self.thumbnails):
+            new_row = i // cols
+            new_col = i % cols
+            old_pos = self.thumb_positions.get(i)
+            
+            # 只有位置变化时才调用grid
+            if old_pos != (new_row, new_col):
+                thumb.grid(row=new_row, column=new_col, padx=5, pady=5)
+                self.thumb_positions[i] = (new_row, new_col)
+    
+    def _on_canvas_resize(self, event):
+        """画布大小变化时重新排列缩略图（带防抖）"""
+        # 取消之前的定时器
+        if self.debounce_id:
+            self.after_cancel(self.debounce_id)
+        
+        # 延迟200ms后执行，更平滑
+        self.debounce_id = self.after(200, self._rearrange_thumbnails)
 
     def _on_thumbnail_click(self, filepath: str):
         """点击缩略图"""
