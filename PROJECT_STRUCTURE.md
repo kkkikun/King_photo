@@ -56,7 +56,7 @@ King_photo/
 │   ├── ui/                       # 用户界面 ⬅ 通过 get_api() 访问
 │   │   ├── __init__.py
 │   │   ├── app.py                # 主应用窗口（快捷键+工具提示+主题切换+格式检测流程）
-│   │   ├── folder_view.py        # 文件夹模式视图（适配窗口预览+信息面板）
+│   │   ├── folder_view.py        # 文件夹模式视图（适配窗口预览+信息面板+动态布局性能优化）
 │   │   ├── single_view.py        # 单图片模式视图
 │   │   ├── batch_dialog.py       # 批量操作对话框
 │   │   ├── format_mismatch_dialog.py # 格式不匹配交互对话框 v1.4.0
@@ -331,7 +331,7 @@ King_photo/
 
 #### 2. folder_view.py - 文件夹模式视图
 
-**职责**: 文件夹模式下的缩略图网格显示
+**职责**: 文件夹模式下的缩略图网格显示，支持动态布局性能优化
 
 **主要类**:
 - `FolderView`: 文件夹视图
@@ -344,10 +344,19 @@ King_photo/
 | `_select_all()` | 全选 |
 | `_invert_selection()` | 反选 |
 | `get_selected_files()` | 获取选中的文件 |
+| `_calculate_cols()` | 根据画布宽度计算最佳列数（动态布局） |
+| `_rearrange_thumbnails()` | 重新排列缩略图网格（性能优化） |
+| `_on_canvas_resize()` | 画布大小变化事件处理（带防抖） |
+
+**性能优化特性**:
+- **动态列数计算**: 根据画布宽度自动计算最佳列数（替代固定4列）
+- **防抖机制**: 画布大小变化时延迟200ms重新排列，避免频繁重排
+- **智能重排**: 只更新位置真正变化的缩略图，提高性能
+- **配置参数**: `THUMBNAIL_WIDTH=140`, `MIN_COLS=1`, `MAX_COLS=10`, `SAFETY_MARGIN=30`
 
 **依赖**: `widgets.ThumbnailWidget`
 
-**代码行数**: ~400行
+**代码行数**: ~460行
 
 ---
 

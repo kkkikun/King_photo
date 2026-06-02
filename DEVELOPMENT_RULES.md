@@ -985,6 +985,81 @@ def batch_process(file_list, process_func, progress_callback=None):
     return results
 ```
 
+### 11.4 动态布局优化
+
+**规则：** 对于响应式UI布局，应使用防抖机制和动态计算，避免频繁重排。
+
+```python
+class DynamicLayoutWidget:
+    """动态布局组件示例（参考 folder_view.py）"""
+    
+    # 配置参数
+    THUMBNAIL_WIDTH = 140  # 每个单元占用的总宽度
+    MIN_COLS = 1
+    MAX_COLS = 10
+    SAFETY_MARGIN = 30  # 安全边距
+    
+    def __init__(self):
+        # 防抖相关
+        self.debounce_id = None
+        self.current_cols = 0  # 记录当前列数，避免不必要的重排
+        self.positions = {}  # 记录每个元素的位置
+        
+        # 绑定画布大小变化事件
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
+    
+    def _calculate_cols(self) -> int:
+        """根据画布宽度计算应该显示的列数"""
+        canvas_width = self.canvas.winfo_width()
+        if canvas_width <= 1:
+            canvas_width = self.canvas.winfo_reqwidth()
+        
+        # 减去滚动条宽度和安全边距
+        available_width = canvas_width - 20 - self.SAFETY_MARGIN
+        # 使用整除确保不会超出，保守计算
+        cols = max(self.MIN_COLS, min(self.MAX_COLS, available_width // self.THUMBNAIL_WIDTH))
+        return cols
+    
+    def _rearrange_elements(self):
+        """重新排列元素到正确的网格位置"""
+        if not self.elements:
+            return
+        
+        cols = self._calculate_cols()
+        
+        # 只有列数真正变化时才重排
+        if cols == self.current_cols:
+            return
+        
+        self.current_cols = cols
+        
+        # 只更新位置真正变化的元素
+        for i, elem in enumerate(self.elements):
+            new_row = i // cols
+            new_col = i % cols
+            old_pos = self.positions.get(i)
+            
+            # 只有位置变化时才调用grid
+            if old_pos != (new_row, new_col):
+                elem.grid(row=new_row, column=new_col, padx=5, pady=5)
+                self.positions[i] = (new_row, new_col)
+    
+    def _on_canvas_resize(self, event):
+        """画布大小变化时重新排列元素（带防抖）"""
+        # 取消之前的定时器
+        if self.debounce_id:
+            self.after_cancel(self.debounce_id)
+        
+        # 延迟200ms后执行，更平滑
+        self.debounce_id = self.after(200, self._rearrange_elements)
+```
+
+**关键点：**
+1. **防抖机制**: 使用 `after()` 延迟执行，避免频繁重排
+2. **状态记录**: 记录当前列数和元素位置，只更新变化的部分
+3. **配置参数**: 将布局参数提取为常量，便于调整
+4. **事件绑定**: 绑定 `<Configure>` 事件响应容器大小变化
+
 ---
 
 ## 安全规则

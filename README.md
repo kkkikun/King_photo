@@ -267,6 +267,12 @@ King_photo/
 
 ## 更新日志
 
+### v1.4.1 (2026-06-02)
+
+#### Improvements
+- **缩略图网格布局性能优化**：动态列数计算、防抖机制、智能重排，提高大文件夹中缩略图的布局性能
+- **GitHub Actions**：添加自动构建exe的release workflow
+
 ### v1.4.0 (2026-05-31)
 
 #### New Features
