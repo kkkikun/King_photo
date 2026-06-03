@@ -154,10 +154,19 @@ class FolderView(ttk.Frame):
         
         # 计算总高度
         total_rows = (len(files) + cols - 1) // cols
+        self.total_rows = total_rows
         self.thumbnail_frame_height = total_rows * THUMBNAIL_HEIGHT
         
-        # 更新canvas的scrollregion
-        self.thumbnail_canvas.configure(scrollregion=(0, 0, 1, self.thumbnail_frame_height))
+        # 获取画布宽度
+        canvas_width = self.thumbnail_canvas.winfo_width()
+        if canvas_width <= 1:
+            canvas_width = 800  # 默认宽度
+        
+        # 更新canvas的scrollregion - 必须包含正确的宽度和高度
+        self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
+        
+        # 设置thumbnail_frame的宽度
+        self.thumbnail_frame.configure(width=canvas_width)
         
         # 刷新可见区域
         self._update_visible_thumbnails()
@@ -276,8 +285,13 @@ class FolderView(ttk.Frame):
             
             # 重新计算总高度
             total_rows = (len(self.files) + cols - 1) // cols
+            self.total_rows = total_rows
             self.thumbnail_frame_height = total_rows * THUMBNAIL_HEIGHT
-            self.thumbnail_canvas.configure(scrollregion=(0, 0, 1, self.thumbnail_frame_height))
+            
+            # 获取画布宽度并更新scrollregion
+            canvas_width = self.thumbnail_canvas.winfo_width()
+            self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
+            self.thumbnail_frame.configure(width=canvas_width)
             
             # 刷新可见区域
             self._update_visible_thumbnails()
