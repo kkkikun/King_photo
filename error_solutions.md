@@ -462,48 +462,47 @@ def _on_canvas_leave(self, event):
 
 ---
 
-## 优化 1：虚拟列表性能优化
+## 优化 1：缩略图分批异步加载
 
 ### 优化目标
-提升左侧缩略图列表的刷新性能，解决大文件夹（1000+文件）加载缓慢和滚动卡顿问题。
+提升左侧缩略图列表的加载性能，解决大文件夹加载缓慢和UI阻塞问题。
 
 ### 优化前问题
-- 一次性加载所有缩略图控件，内存占用 O(n)
+- 一次性加载所有缩略图，导致UI阻塞
 - 大文件夹加载时间长，用户体验差
-- 滚动时所有控件都参与渲染，导致卡顿
 
 ### 优化方案
-实现虚拟列表模式：
-1. **只渲染可见区域**：通过 `_get_visible_range()` 计算当前可见的文件索引范围
-2. **动态加载/卸载**：`_update_visible_thumbnails()` 只创建可见区域的缩略图控件
-3. **缓冲行机制**：`BUFFER_ROWS = 2`，可见区域上下各额外渲染2行，提升滚动流畅度
-4. **异步加载**：缩略图图片采用异步加载，不阻塞UI
+采用分批异步加载策略：
+1. **一次性创建控件**：所有缩略图控件一次性创建，避免滚动时频繁创建/销毁开销
+2. **分批异步加载**：使用 `_async_load_thumbnails()` 方法，每次加载5个缩略图
+3. **UI线程调度**：使用 `after()` 方法调度，避免阻塞主UI线程
 
 ### 关键代码
 ```python
-def _get_visible_range(self) -> tuple:
-    y0 = self.thumbnail_canvas.canvasx(0)
-    y1 = y0 + self.thumbnail_canvas.winfo_height()
-    start_row = max(0, int(y0 // THUMBNAIL_HEIGHT) - BUFFER_ROWS)
-    end_row = min(total_rows, int(y1 // THUMBNAIL_HEIGHT) + BUFFER_ROWS)
-    return start_row * cols, min(len(files), (end_row + 1) * cols)
-
-def _update_visible_thumbnails(self):
-    start_idx, end_idx = self._get_visible_range()
-    # 移除不可见的缩略图
-    # 加载新可见的缩略图
+def _async_load_thumbnails(self, start_idx, batch_size):
+    """异步分批加载缩略图"""
+    if start_idx >= len(self.thumbnails):
+        return
+    
+    end_idx = min(start_idx + batch_size, len(self.thumbnails))
+    
+    for i in range(start_idx, end_idx):
+        self.thumbnails[i].load_thumbnail_async()
+    
+    # 调度下一批次
+    self.after(10, lambda: self._async_load_thumbnails(end_idx, batch_size))
 ```
 
 ### 优化效果
-- **内存占用**：从 O(n) 降为 O(可见数量)，大幅减少内存消耗
-- **加载速度**：打开大文件夹时立即响应，无需等待所有缩略图加载
-- **滚动流畅度**：只渲染可见区域，滚动更加流畅
+- **UI响应性**：加载过程中UI保持响应，用户可以立即操作
+- **渐进式加载**：缩略图逐渐显示，用户体验流畅
+- **简单可靠**：避免复杂虚拟列表的性能问题
 
 ### 涉及文件
 - `src/ui/folder_view.py`
 
 ---
 
-> **文档版本**: 2.2  
-> **最后更新**: 2026-06-02  
+> **文档版本**: 2.3  
+> **最后更新**: 2026-06-03  
 > **维护规则**: 每次修复错误后，必须在本文档中添加新记录
