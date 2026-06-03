@@ -1,5 +1,5 @@
 """
-King_photo - 文件夹模式视图（虚拟列表优化版）
+King_photo - 文件夹模式视图（优化版）
 """
 
 import os
@@ -15,22 +15,16 @@ from .widgets import ThumbnailWidget, ImagePreviewWidget, MetadataEditorWidget
 from ..api import get_api
 from ..utils.helpers import format_file_size, format_datetime, get_image_files_in_folder
 
-# 异步加载阈值：文件数量超过此值时使用异步加载
-ASYNC_THRESHOLD = 20
-
 # 缩略图配置
-THUMBNAIL_WIDTH = 140  # 每个缩略图占用的总宽度（包括间距）
-THUMBNAIL_HEIGHT = 160  # 每个缩略图占用的总高度（包括间距）
+THUMBNAIL_WIDTH = 140
+THUMBNAIL_HEIGHT = 160
 MIN_COLS = 1
 MAX_COLS = 10
-SAFETY_MARGIN = 30  # 安全边距
-
-# 虚拟列表配置
-BUFFER_ROWS = 2  # 可见区域上下各额外渲染的行数
+SAFETY_MARGIN = 30
 
 
 class FolderView(ttk.Frame):
-    """文件夹模式视图（虚拟列表优化版）"""
+    """文件夹模式视图"""
 
     def __init__(self, master, app, **kwargs):
         super().__init__(master, **kwargs)
@@ -38,28 +32,19 @@ class FolderView(ttk.Frame):
         self.app = app
         self.folder_path = None
         self.files = []
-        self.thumbnails = []  # 所有缩略图控件（缓存）
-        self.visible_thumbnails = {}  # 当前可见的缩略图 {index: widget}
+        self.thumbnails = []
         self.selected_files = set()
         
-        # 防抖相关
         self.debounce_id = None
         self.current_cols = 0
         self.last_canvas_width = 0
         
-        # 虚拟列表相关
-        self.thumbnail_frame_height = 0  # 总高度（用于scrollregion）
-        self.rendered_start = 0  # 当前渲染的起始索引
-        self.rendered_end = 0  # 当前渲染的结束索引
-        
-        # 初始化统一API
         self.api = get_api()
 
         self._create_ui()
 
     def _create_ui(self):
         """创建UI"""
-        # 主分割面板
         self.paned = PanedWindow(self, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
 
@@ -80,11 +65,13 @@ class FolderView(ttk.Frame):
 
         # 缩略图滚动区域
         self.thumbnail_canvas = tk.Canvas(left_frame)
-        self.thumbnail_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self._on_scrollbar_move)
+        self.thumbnail_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.thumbnail_canvas.yview)
 
-        # 使用固定高度的Frame用于虚拟列表
-        self.thumbnail_frame = tk.Frame(self.thumbnail_canvas, height=1000)
-        self.thumbnail_frame.pack_propagate(False)  # 防止子控件改变大小
+        self.thumbnail_frame = ttk.Frame(self.thumbnail_canvas)
+        self.thumbnail_frame.bind(
+            "<Configure>",
+            lambda e: self.thumbnail_canvas.configure(scrollregion=self.thumbnail_canvas.bbox("all"))
+        )
 
         self.thumbnail_canvas.create_window((0, 0), window=self.thumbnail_frame, anchor=tk.NW)
         self.thumbnail_canvas.configure(yscrollcommand=self.thumbnail_scrollbar.set)
@@ -98,33 +85,19 @@ class FolderView(ttk.Frame):
         
         # 绑定画布大小变化事件
         self.thumbnail_canvas.bind("<Configure>", self._on_canvas_resize)
-        
-        # 绑定滚动事件
-        self.thumbnail_canvas.bind("<MouseWheel>", self._on_mousewheel)
 
         # 右侧：预览和信息
         right_frame = ttk.Frame(self.paned)
         self.paned.add(right_frame, weight=3)
 
-        # 图片预览
         self.preview = ImagePreviewWidget(right_frame, max_size=(600, 500))
         self.preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=(5, 0))
 
-        # 信息显示
         info_frame = ttk.LabelFrame(right_frame, text="图片信息")
         info_frame.pack(fill=tk.BOTH, padx=5, pady=5)
 
         self.info_text = tk.Text(info_frame, height=12, wrap=tk.WORD)
         self.info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-    def _on_scrollbar_move(self, *args):
-        """滚动条拖动事件，更新Canvas视图和可见区域"""
-        if args:
-            if args[0] == 'moveto':
-                self.thumbnail_canvas.yview_moveto(args[1])
-            elif args[0] == 'scroll':
-                self.thumbnail_canvas.yview_scroll(args[1], args[2])
-        self._update_visible_thumbnails()
 
     def show(self):
         """显示视图"""
@@ -135,41 +108,52 @@ class FolderView(ttk.Frame):
         self.pack_forget()
 
     def load_folder(self, folder_path: str, files: List[str]):
-        """加载文件夹（虚拟列表模式）"""
+        """加载文件夹"""
         self.folder_path = folder_path
-        self.files = files
         self.selected_files.clear()
 
-        # 清空现有控件
+        # 清空现有缩略图
         for widget in self.thumbnail_frame.winfo_children():
             widget.destroy()
         self.thumbnails.clear()
-        self.visible_thumbnails.clear()
 
         # 计算列数
         cols = self._calculate_cols()
         self.current_cols = cols
-        
-        # 计算总高度
-        total_rows = (len(files) + cols - 1) // cols
-        self.total_rows = total_rows
-        self.thumbnail_frame_height = total_rows * THUMBNAIL_HEIGHT
-        
-        # 获取画布宽度
-        canvas_width = self.thumbnail_canvas.winfo_width()
-        if canvas_width <= 1:
-            canvas_width = 800  # 默认宽度
-        
-        # 更新canvas的scrollregion - 必须包含正确的宽度和高度
-        self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
-        
-        # 设置thumbnail_frame的宽高
-        self.thumbnail_frame.configure(width=canvas_width, height=self.thumbnail_frame_height)
-        
-        # 刷新可见区域
-        self._update_visible_thumbnails()
+
+        # 批量创建缩略图（使用grid布局）
+        for i, filepath in enumerate(files):
+            row = i // cols
+            col = i % cols
+
+            thumb = ThumbnailWidget(
+                self.thumbnail_frame,
+                filepath,
+                size=(120, 120),
+                on_click=self._on_thumbnail_click,
+                on_select=self._on_thumbnail_select
+            )
+            thumb.grid(row=row, column=col, padx=5, pady=5)
+            self.thumbnails.append(thumb)
+
+        # 异步加载所有缩略图（避免阻塞UI）
+        self._async_load_thumbnails(0, min(len(files), 5))
         
         self._update_select_count()
+
+    def _async_load_thumbnails(self, start_idx, batch_size):
+        """异步分批加载缩略图"""
+        if start_idx >= len(self.thumbnails):
+            return
+        
+        end_idx = min(start_idx + batch_size, len(self.thumbnails))
+        
+        # 加载当前批次
+        for i in range(start_idx, end_idx):
+            self.thumbnails[i].load_thumbnail_async()
+        
+        # 调度下一批次
+        self.after(10, lambda: self._async_load_thumbnails(end_idx, batch_size))
 
     def _calculate_cols(self) -> int:
         """根据画布宽度计算列数"""
@@ -181,84 +165,8 @@ class FolderView(ttk.Frame):
         cols = max(MIN_COLS, min(MAX_COLS, available_width // THUMBNAIL_WIDTH))
         return cols
 
-    def _get_visible_range(self) -> tuple:
-        """获取当前可见区域的文件索引范围"""
-        # 获取当前滚动位置（使用canvasy获取Y轴位置）
-        y0 = self.thumbnail_canvas.canvasy(0)
-        y1 = y0 + self.thumbnail_canvas.winfo_height()
-        
-        # 计算可见的行范围（包含缓冲行）
-        start_row = max(0, int(y0 // THUMBNAIL_HEIGHT) - BUFFER_ROWS)
-        end_row = min((len(self.files) + self.current_cols - 1) // self.current_cols, 
-                      int(y1 // THUMBNAIL_HEIGHT) + BUFFER_ROWS)
-        
-        # 转换为文件索引范围
-        start_idx = start_row * self.current_cols
-        end_idx = min(len(self.files), (end_row + 1) * self.current_cols)
-        
-        return start_idx, end_idx
-
-    def _update_visible_thumbnails(self):
-        """更新可见区域的缩略图"""
-        if not self.files:
-            return
-            
-        start_idx, end_idx = self._get_visible_range()
-        
-        # 移除不再可见的缩略图
-        to_remove = []
-        for idx in self.visible_thumbnails:
-            if idx < start_idx or idx >= end_idx:
-                widget = self.visible_thumbnails[idx]
-                widget.pack_forget()
-                widget.grid_forget()
-                to_remove.append(idx)
-        
-        for idx in to_remove:
-            del self.visible_thumbnails[idx]
-        
-        # 加载新可见的缩略图
-        for idx in range(start_idx, end_idx):
-            if idx not in self.visible_thumbnails:
-                self._create_and_render_thumbnail(idx)
-        
-        self.rendered_start = start_idx
-        self.rendered_end = end_idx
-
-    def _create_and_render_thumbnail(self, idx: int):
-        """创建并渲染指定索引的缩略图"""
-        if idx >= len(self.files):
-            return
-        
-        filepath = self.files[idx]
-        cols = self.current_cols
-        
-        # 计算位置
-        row = idx // cols
-        col = idx % cols
-        
-        # 创建缩略图控件
-        thumb = ThumbnailWidget(
-            self.thumbnail_frame,
-            filepath,
-            size=(120, 120),
-            on_click=self._on_thumbnail_click,
-            on_select=self._on_thumbnail_select
-        )
-        
-        # 设置选中状态
-        if filepath in self.selected_files:
-            thumb.set_selected(True)
-        
-        # 放置到正确位置
-        thumb.grid(row=row, column=col, padx=5, pady=5)
-        self.visible_thumbnails[idx] = thumb
-        
-        # 异步加载缩略图
-        thumb.load_thumbnail_async()
-
     def _on_canvas_resize(self, event):
-        """画布大小变化时重新计算列数并刷新（带防抖）"""
+        """画布大小变化时重新排列缩略图（带防抖）"""
         current_width = self.thumbnail_canvas.winfo_width()
         if current_width == self.last_canvas_width:
             return
@@ -268,31 +176,25 @@ class FolderView(ttk.Frame):
         if self.debounce_id:
             self.after_cancel(self.debounce_id)
         
-        self.debounce_id = self.after(200, self._handle_resize)
+        self.debounce_id = self.after(200, self._rearrange_thumbnails)
 
-    def _handle_resize(self):
-        """处理窗口大小变化"""
+    def _rearrange_thumbnails(self):
+        """重新排列缩略图到正确的网格位置"""
+        if not self.thumbnails:
+            return
+        
         cols = self._calculate_cols()
-        if cols != self.current_cols:
-            self.current_cols = cols
-            
-            # 清空现有控件
-            for widget in self.thumbnail_frame.winfo_children():
-                widget.destroy()
-            self.visible_thumbnails.clear()
-            
-            # 重新计算总高度
-            total_rows = (len(self.files) + cols - 1) // cols
-            self.total_rows = total_rows
-            self.thumbnail_frame_height = total_rows * THUMBNAIL_HEIGHT
-            
-            # 获取画布宽度并更新scrollregion
-            canvas_width = self.thumbnail_canvas.winfo_width()
-            self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
-            self.thumbnail_frame.configure(width=canvas_width, height=self.thumbnail_frame_height)
-            
-            # 刷新可见区域
-            self._update_visible_thumbnails()
+        
+        if cols == self.current_cols:
+            return
+        
+        self.current_cols = cols
+        
+        # 重新排列所有缩略图
+        for i, thumb in enumerate(self.thumbnails):
+            new_row = i // cols
+            new_col = i % cols
+            thumb.grid(row=new_row, column=new_col, padx=5, pady=5)
 
     def _on_canvas_enter(self, event):
         """鼠标进入画布区域时绑定全局滚轮事件"""
@@ -305,7 +207,6 @@ class FolderView(ttk.Frame):
     def _on_mousewheel(self, event):
         """鼠标滚轮事件"""
         self.thumbnail_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self._update_visible_thumbnails()
 
     def _on_thumbnail_click(self, filepath: str):
         """点击缩略图"""
@@ -348,30 +249,25 @@ class FolderView(ttk.Frame):
 
     def select_all(self):
         """全选"""
-        for idx, filepath in enumerate(self.files):
-            self.selected_files.add(filepath)
-            # 更新可见控件的选中状态
-            if idx in self.visible_thumbnails:
-                self.visible_thumbnails[idx].set_selected(True)
+        for thumb in self.thumbnails:
+            thumb.set_selected(True)
+            self.selected_files.add(thumb.filepath)
         self._update_select_count()
 
     def invert_selection(self):
         """反选"""
-        for idx, filepath in enumerate(self.files):
-            if filepath in self.selected_files:
-                self.selected_files.remove(filepath)
-                if idx in self.visible_thumbnails:
-                    self.visible_thumbnails[idx].set_selected(False)
-            else:
-                self.selected_files.add(filepath)
-                if idx in self.visible_thumbnails:
-                    self.visible_thumbnails[idx].set_selected(True)
+        self.selected_files.clear()
+        for thumb in self.thumbnails:
+            new_state = not thumb.is_selected()
+            thumb.set_selected(new_state)
+            if new_state:
+                self.selected_files.add(thumb.filepath)
         self._update_select_count()
 
     def deselect_all(self):
         """取消选择"""
-        for idx in self.visible_thumbnails:
-            self.visible_thumbnails[idx].set_selected(False)
+        for thumb in self.thumbnails:
+            thumb.set_selected(False)
         self.selected_files.clear()
         self._update_select_count()
 
