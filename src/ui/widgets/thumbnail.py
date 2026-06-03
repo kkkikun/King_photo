@@ -28,6 +28,7 @@ class ThumbnailWidget(tk.Frame):
         self.on_select = on_select
         self.selected = False
         self._loaded = False
+        self._destroyed = False  # 标记控件是否已被销毁
 
         # Checkbox
         self.var_selected = tk.BooleanVar(value=False)
@@ -46,6 +47,11 @@ class ThumbnailWidget(tk.Frame):
         self.name_label = tk.Label(self, text=display_name,
                                     wraplength=size[0], font=('Arial', 8))
         self.name_label.pack(side=tk.TOP)
+
+    def destroy(self):
+        """重写destroy方法，标记控件已销毁"""
+        self._destroyed = True
+        super().destroy()
 
     def _load_thumbnail(self):
         """同步加载缩略图"""
@@ -111,12 +117,18 @@ class ThumbnailWidget(tk.Frame):
         threading.Thread(target=_load, daemon=True).start()
 
     def _show_image(self, photo, callback=None):
+        """显示加载的图片"""
+        if self._destroyed:
+            return  # 控件已销毁，不再更新
         self.photo = photo
         self.image_label.configure(image=self.photo, text='')
         self._loaded = True
         if callback: callback()
 
     def _show_error(self, text, callback=None):
+        """显示错误信息"""
+        if self._destroyed:
+            return  # 控件已销毁，不再更新
         self.image_label.configure(text=text, width=self.size[0] // 8,
                                    height=self.size[1] // 16)
         self._loaded = True
