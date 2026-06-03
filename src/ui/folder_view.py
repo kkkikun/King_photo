@@ -80,16 +80,14 @@ class FolderView(ttk.Frame):
 
         # 缩略图滚动区域
         self.thumbnail_canvas = tk.Canvas(left_frame)
-        self.thumbnail_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.thumbnail_canvas.yview)
+        self.thumbnail_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self._on_scrollbar_move)
 
-        self.thumbnail_frame = ttk.Frame(self.thumbnail_canvas)
-        self.thumbnail_frame.bind(
-            "<Configure>",
-            lambda e: self.thumbnail_canvas.configure(scrollregion=self.thumbnail_canvas.bbox("all"))
-        )
+        # 使用固定高度的Frame用于虚拟列表
+        self.thumbnail_frame = tk.Frame(self.thumbnail_canvas, height=1000)
+        self.thumbnail_frame.pack_propagate(False)  # 防止子控件改变大小
 
         self.thumbnail_canvas.create_window((0, 0), window=self.thumbnail_frame, anchor=tk.NW)
-        self.thumbnail_canvas.configure(yscrollcommand=self.scrollbar_yview)
+        self.thumbnail_canvas.configure(yscrollcommand=self.thumbnail_scrollbar.set)
 
         self.thumbnail_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.thumbnail_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -119,8 +117,8 @@ class FolderView(ttk.Frame):
         self.info_text = tk.Text(info_frame, height=12, wrap=tk.WORD)
         self.info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-    def scrollbar_yview(self, *args):
-        """滚动条回调，同步更新可见区域"""
+    def _on_scrollbar_move(self, *args):
+        """滚动条拖动事件，更新Canvas视图和可见区域"""
         if args:
             if args[0] == 'moveto':
                 self.thumbnail_canvas.yview_moveto(args[1])
@@ -165,8 +163,8 @@ class FolderView(ttk.Frame):
         # 更新canvas的scrollregion - 必须包含正确的宽度和高度
         self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
         
-        # 设置thumbnail_frame的宽度
-        self.thumbnail_frame.configure(width=canvas_width)
+        # 设置thumbnail_frame的宽高
+        self.thumbnail_frame.configure(width=canvas_width, height=self.thumbnail_frame_height)
         
         # 刷新可见区域
         self._update_visible_thumbnails()
@@ -291,7 +289,7 @@ class FolderView(ttk.Frame):
             # 获取画布宽度并更新scrollregion
             canvas_width = self.thumbnail_canvas.winfo_width()
             self.thumbnail_canvas.configure(scrollregion=(0, 0, canvas_width, self.thumbnail_frame_height))
-            self.thumbnail_frame.configure(width=canvas_width)
+            self.thumbnail_frame.configure(width=canvas_width, height=self.thumbnail_frame_height)
             
             # 刷新可见区域
             self._update_visible_thumbnails()
