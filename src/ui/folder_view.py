@@ -183,8 +183,8 @@ class FolderView(ttk.Frame):
 
     def _get_visible_range(self) -> tuple:
         """获取当前可见区域的文件索引范围"""
-        # 获取当前滚动位置
-        y0 = self.thumbnail_canvas.canvasx(0)
+        # 获取当前滚动位置（使用canvasy获取Y轴位置）
+        y0 = self.thumbnail_canvas.canvasy(0)
         y1 = y0 + self.thumbnail_canvas.winfo_height()
         
         # 计算可见的行范围（包含缓冲行）
