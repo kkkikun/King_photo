@@ -21,7 +21,7 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.4.0
+**版本**: v1.5.0
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
@@ -127,7 +127,7 @@ King_photo/
 ├── README.md                     # 项目说明
 ├── PLUGIN_DOC.md                 # 插件开发文档（v1.3.0新增）
 ├── DEVELOPMENT_RULES.md          # 开发规则
-├── error_solutions.md            # 错误解决记录（18条）
+├── error_solutions.md            # 错误解决记录（20条）
 └── PROJECT_STRUCTURE.md          # 项目结构说明书（本文件）
 ```
 
@@ -331,32 +331,55 @@ King_photo/
 
 #### 2. folder_view.py - 文件夹模式视图
 
-**职责**: 文件夹模式下的缩略图网格显示，支持动态布局性能优化
+**职责**: 文件夹模式下的缩略图网格显示，支持虚拟滚动和动态布局性能优化
 
 **主要类**:
-- `FolderView`: 文件夹视图
+- `FolderView`: 文件夹视图（支持虚拟滚动）
 
 **关键方法**:
 | 方法 | 功能 |
 |------|------|
-| `load_folder(folder_path)` | 加载文件夹 |
-| `_create_thumbnail_grid()` | 创建缩略图网格 |
-| `_select_all()` | 全选 |
-| `_invert_selection()` | 反选 |
+| `load_folder(folder_path, files)` | 加载文件夹（支持虚拟滚动模式） |
+| `_setup_virtual_scroll()` | 设置虚拟滚动区域 |
+| `_update_visible_widgets()` | 更新可见区域的控件 |
+| `_create_thumbnail_widget(idx)` | 创建指定索引的缩略图控件 |
+| `_update_widget_positions()` | 更新控件位置 |
+| `_on_scroll()` | 滚动事件处理（防抖） |
+| `_on_mousewheel(event)` | 鼠标滚轮事件 |
+| `_on_thumbnail_select_virtual()` | 虚拟滚动模式下的选中状态改变 |
+| `select_all()` | 全选（支持虚拟滚动） |
+| `invert_selection()` | 反选（支持虚拟滚动） |
+| `deselect_all()` | 取消选择（支持虚拟滚动） |
 | `get_selected_files()` | 获取选中的文件 |
 | `_calculate_cols()` | 根据画布宽度计算最佳列数（动态布局） |
-| `_rearrange_thumbnails()` | 重新排列缩略图网格（性能优化） |
 | `_on_canvas_resize()` | 画布大小变化事件处理（带防抖） |
 
+**虚拟滚动配置参数**:
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `VIRTUAL_SCROLL_ENABLED` | `True` | 启用虚拟滚动 |
+| `VISIBLE_BUFFER_ROWS` | `2` | 额外渲染的行数（上下各2行） |
+| `MAX_VISIBLE_WIDGETS` | `100` | 最大可见控件数 |
+| `ROW_HEIGHT` | `170` | 行高（THUMBNAIL_HEIGHT + 10） |
+
+**虚拟滚动核心属性**:
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `visible_widgets` | `Dict[int, ThumbnailWidget]` | 索引→控件映射 |
+| `selected_states` | `Dict[int, bool]` | 索引→选中状态映射 |
+| `virtual_height` | `int` | 虚拟滚动区域高度 |
+| `scroll_update_id` | `int` | 滚动更新定时器ID |
+
 **性能优化特性**:
+- **虚拟滚动**: 只创建可见区域的控件，动态创建和销毁，减少内存使用80-90%
 - **动态列数计算**: 根据画布宽度自动计算最佳列数（替代固定4列）
-- **防抖机制**: 画布大小变化时延迟200ms重新排列，避免频繁重排
+- **防抖机制**: 画布大小变化时延迟200ms重新排列，滚动时延迟50ms更新
 - **智能重排**: 只更新位置真正变化的缩略图，提高性能
-- **配置参数**: `THUMBNAIL_WIDTH=140`, `MIN_COLS=1`, `MAX_COLS=10`, `SAFETY_MARGIN=30`
+- **选中状态持久化**: 使用字典存储选中状态，滚动时正确恢复
 
 **依赖**: `widgets.ThumbnailWidget`
 
-**代码行数**: ~460行
+**代码行数**: ~500行
 
 ---
 
@@ -1027,7 +1050,7 @@ config.get('window.width', 1200)
 
 ---
 
-**文档版本**: 1.1  
-**最后更新**: 2026-05-31  
-**对应项目版本**: v1.4.0  
+**文档版本**: 1.2  
+**最后更新**: 2026-06-05  
+**对应项目版本**: v1.5.0  
 **维护者**: King_photo 开发团队

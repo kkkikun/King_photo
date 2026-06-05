@@ -22,6 +22,12 @@ MIN_COLS = 1
 MAX_COLS = 10
 SAFETY_MARGIN = 30
 
+# 虚拟滚动配置
+VIRTUAL_SCROLL_ENABLED = True  # 启用虚拟滚动
+VISIBLE_BUFFER_ROWS = 2  # 额外渲染的行数（上下各2行）
+MAX_VISIBLE_WIDGETS = 100  # 最大可见控件数
+ROW_HEIGHT = THUMBNAIL_HEIGHT + 10  # 行高（包括padding）
+
 
 class FolderView(ttk.Frame):
     """文件夹模式视图"""
@@ -31,10 +37,19 @@ class FolderView(ttk.Frame):
 
         self.app = app
         self.folder_path = None
-        self.files = []
-        self.thumbnails = []
+        self.files = []  # 所有文件路径
+        self.thumbnails = []  # 兼容旧代码，不再使用
         self.selected_files = set()
         
+        # 虚拟滚动相关属性
+        self.visible_widgets = {}  # 索引 -> 控件
+        self.selected_states = {}  # 索引 -> bool
+        self.virtual_height = 0
+        self.first_visible_row = 0
+        self.last_visible_row = 0
+        self.scroll_update_id = None
+        
+        # 动态布局相关
         self.debounce_id = None
         self.current_cols = 0
         self.last_canvas_width = 0
@@ -110,13 +125,26 @@ class FolderView(ttk.Frame):
     def load_folder(self, folder_path: str, files: List[str]):
         """加载文件夹"""
         self.folder_path = folder_path
-        self.selected_files.clear()
+        self.files = files
+        self.selected_states.clear()
 
-        # 清空现有缩略图
+        # 清空现有控件
         for widget in self.thumbnail_frame.winfo_children():
             widget.destroy()
-        self.thumbnails.clear()
+        self.visible_widgets.clear()
 
+        if not VIRTUAL_SCROLL_ENABLED:
+            # 原有逻辑：创建所有控件
+            self._create_all_widgets(files)
+        else:
+            # 虚拟滚动：只创建可见控件
+            self._setup_virtual_scroll()
+            self._update_visible_widgets()
+
+        self._update_select_count()
+
+    def _create_all_widgets(self, files: List[str]):
+        """创建所有控件（原有逻辑）"""
         # 计算列数
         cols = self._calculate_cols()
         self.current_cols = cols
@@ -138,8 +166,6 @@ class FolderView(ttk.Frame):
 
         # 异步加载所有缩略图（避免阻塞UI）
         self._async_load_thumbnails(0, min(len(files), 5))
-        
-        self._update_select_count()
 
     def _async_load_thumbnails(self, start_idx, batch_size):
         """异步分批加载缩略图"""
@@ -154,6 +180,110 @@ class FolderView(ttk.Frame):
         
         # 调度下一批次
         self.after(10, lambda: self._async_load_thumbnails(end_idx, batch_size))
+
+    def _setup_virtual_scroll(self):
+        """设置虚拟滚动区域"""
+        cols = self._calculate_cols()
+        if cols == 0:
+            cols = 1
+        
+        # 更新current_cols
+        self.current_cols = cols
+        
+        total_rows = (len(self.files) + cols - 1) // cols
+        self.virtual_height = total_rows * ROW_HEIGHT
+
+        # 设置虚拟滚动区域
+        self.thumbnail_frame.configure(height=self.virtual_height)
+        self.thumbnail_canvas.configure(scrollregion=(0, 0, 0, self.virtual_height))
+
+    def _update_visible_widgets(self):
+        """更新可见区域的控件"""
+        if not self.files:
+            return
+
+        # 获取当前滚动位置
+        scroll_top = self.thumbnail_canvas.canvasy(0)
+        scroll_bottom = scroll_top + self.thumbnail_canvas.winfo_height()
+
+        # 计算可见行范围
+        cols = self._calculate_cols()
+        if cols == 0:
+            cols = 1
+        
+        # 更新current_cols
+        self.current_cols = cols
+
+        first_visible_row = max(0, int(scroll_top / ROW_HEIGHT) - VISIBLE_BUFFER_ROWS)
+        last_visible_row = min(
+            (len(self.files) + cols - 1) // cols,
+            int(scroll_bottom / ROW_HEIGHT) + VISIBLE_BUFFER_ROWS
+        )
+
+        # 计算可见控件索引范围
+        first_visible_idx = first_visible_row * cols
+        last_visible_idx = min(len(self.files), (last_visible_row + 1) * cols)
+
+        # 销毁不在可见范围内的控件
+        for idx in list(self.visible_widgets.keys()):
+            if idx < first_visible_idx or idx >= last_visible_idx:
+                self.visible_widgets[idx].destroy()
+                del self.visible_widgets[idx]
+
+        # 创建新进入可见范围的控件
+        for idx in range(first_visible_idx, last_visible_idx):
+            if idx not in self.visible_widgets:
+                self._create_thumbnail_widget(idx)
+
+        # 更新控件位置
+        self._update_widget_positions()
+
+    def _create_thumbnail_widget(self, idx: int):
+        """创建指定索引的缩略图控件"""
+        filepath = self.files[idx]
+        
+        # 确保current_cols不为0
+        cols = self.current_cols if self.current_cols > 0 else self._calculate_cols()
+        if cols == 0:
+            cols = 1
+        
+        row = idx // cols
+        col = idx % cols
+
+        # 检查是否已选中
+        is_selected = self.selected_states.get(idx, False)
+
+        thumb = ThumbnailWidget(
+            self.thumbnail_frame,
+            filepath,
+            size=(120, 120),
+            on_click=self._on_thumbnail_click,
+            on_select=lambda fp, sel, i=idx: self._on_thumbnail_select_virtual(fp, sel, i)
+        )
+
+        # 恢复选中状态
+        if is_selected:
+            thumb.set_selected(True)
+
+        thumb.grid(row=row, column=col, padx=5, pady=5)
+        self.visible_widgets[idx] = thumb
+
+        # 异步加载缩略图
+        thumb.load_thumbnail_async()
+
+    def _update_widget_positions(self):
+        """更新控件位置"""
+        cols = self._calculate_cols()
+        if cols == 0:
+            cols = 1
+        
+        # 更新current_cols
+        self.current_cols = cols
+
+        for idx, thumb in self.visible_widgets.items():
+            row = idx // cols
+            col = idx % cols
+            thumb.grid(row=row, column=col, padx=5, pady=5)
 
     def _calculate_cols(self) -> int:
         """根据画布宽度计算列数"""
@@ -176,7 +306,21 @@ class FolderView(ttk.Frame):
         if self.debounce_id:
             self.after_cancel(self.debounce_id)
         
-        self.debounce_id = self.after(200, self._rearrange_thumbnails)
+        self.debounce_id = self.after(200, self._on_resize_debounced)
+
+    def _on_resize_debounced(self):
+        """防抖后的重排处理"""
+        new_cols = self._calculate_cols()
+        if new_cols != self.current_cols:
+            self.current_cols = new_cols
+            if VIRTUAL_SCROLL_ENABLED and self.files:
+                # 重新计算虚拟滚动区域
+                self._setup_virtual_scroll()
+                # 更新可见控件
+                self._update_visible_widgets()
+            else:
+                # 原有逻辑：重新排列所有控件
+                self._rearrange_thumbnails()
 
     def _rearrange_thumbnails(self):
         """重新排列缩略图到正确的网格位置"""
@@ -207,6 +351,16 @@ class FolderView(ttk.Frame):
     def _on_mousewheel(self, event):
         """鼠标滚轮事件"""
         self.thumbnail_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        # 触发虚拟滚动更新
+        self._on_scroll()
+
+    def _on_scroll(self, event=None):
+        """滚动事件处理"""
+        if self.scroll_update_id:
+            self.after_cancel(self.scroll_update_id)
+
+        # 使用防抖机制，避免频繁更新
+        self.scroll_update_id = self.after(50, self._update_visible_widgets)
 
     def _on_thumbnail_click(self, filepath: str):
         """点击缩略图"""
@@ -218,6 +372,16 @@ class FolderView(ttk.Frame):
         if selected:
             self.selected_files.add(filepath)
         else:
+            self.selected_files.discard(filepath)
+        self._update_select_count()
+
+    def _on_thumbnail_select_virtual(self, filepath: str, selected: bool, idx: int):
+        """虚拟滚动模式下的选中状态改变"""
+        if selected:
+            self.selected_states[idx] = True
+            self.selected_files.add(filepath)
+        else:
+            self.selected_states[idx] = False
             self.selected_files.discard(filepath)
         self._update_select_count()
 
@@ -249,25 +413,59 @@ class FolderView(ttk.Frame):
 
     def select_all(self):
         """全选"""
-        for thumb in self.thumbnails:
-            thumb.set_selected(True)
-            self.selected_files.add(thumb.filepath)
+        if VIRTUAL_SCROLL_ENABLED and self.files:
+            # 虚拟滚动模式
+            for idx in range(len(self.files)):
+                self.selected_states[idx] = True
+                filepath = self.files[idx]
+                self.selected_files.add(filepath)
+                # 更新可见控件
+                if idx in self.visible_widgets:
+                    self.visible_widgets[idx].set_selected(True)
+        else:
+            # 原有模式
+            for thumb in self.thumbnails:
+                thumb.set_selected(True)
+                self.selected_files.add(thumb.filepath)
         self._update_select_count()
 
     def invert_selection(self):
         """反选"""
-        self.selected_files.clear()
-        for thumb in self.thumbnails:
-            new_state = not thumb.is_selected()
-            thumb.set_selected(new_state)
-            if new_state:
-                self.selected_files.add(thumb.filepath)
+        if VIRTUAL_SCROLL_ENABLED and self.files:
+            # 虚拟滚动模式
+            self.selected_files.clear()
+            for idx in range(len(self.files)):
+                new_state = not self.selected_states.get(idx, False)
+                self.selected_states[idx] = new_state
+                filepath = self.files[idx]
+                if new_state:
+                    self.selected_files.add(filepath)
+                # 更新可见控件
+                if idx in self.visible_widgets:
+                    self.visible_widgets[idx].set_selected(new_state)
+        else:
+            # 原有模式
+            self.selected_files.clear()
+            for thumb in self.thumbnails:
+                new_state = not thumb.is_selected()
+                thumb.set_selected(new_state)
+                if new_state:
+                    self.selected_files.add(thumb.filepath)
         self._update_select_count()
 
     def deselect_all(self):
         """取消选择"""
-        for thumb in self.thumbnails:
-            thumb.set_selected(False)
+        if VIRTUAL_SCROLL_ENABLED and self.files:
+            # 虚拟滚动模式
+            for idx in range(len(self.files)):
+                self.selected_states[idx] = False
+                # 更新可见控件
+                if idx in self.visible_widgets:
+                    self.visible_widgets[idx].set_selected(False)
+        else:
+            # 原有模式
+            for thumb in self.thumbnails:
+                thumb.set_selected(False)
         self.selected_files.clear()
         self._update_select_count()
 

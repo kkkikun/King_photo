@@ -166,3 +166,25 @@ class ThumbnailWidget(tk.Frame):
 
     def is_selected(self) -> bool:
         return self.selected
+
+    def reset(self, filepath: str, on_click: Callable = None, on_select: Callable = None):
+        """重置控件以重用"""
+        self.filepath = filepath
+        self.on_click = on_click
+        self.on_select = on_select
+        self.selected = False
+        self._loaded = False
+        self._destroyed = False
+
+        # 重置checkbox
+        self.var_selected.set(False)
+
+        # 重置图片显示
+        self.image_label.configure(image='', text='Loading...')
+        if hasattr(self, 'photo'):
+            self.photo = None
+
+        # 更新文件名显示
+        filename = os.path.basename(filepath)
+        display_name = filename if len(filename) <= 15 else filename[:12] + '...'
+        self.name_label.configure(text=display_name)

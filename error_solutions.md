@@ -503,6 +503,36 @@ def _async_load_thumbnails(self, start_idx, batch_size):
 
 ---
 
-> **文档版本**: 2.3  
-> **最后更新**: 2026-06-03  
+## 错误 20：虚拟滚动ZeroDivisionError
+
+### 问题描述
+虚拟滚动实现后，打开包含2000张图片的大文件夹时，程序抛出 `ZeroDivisionError: division by zero` 错误，导致程序崩溃。
+
+### 错误原因
+`self.current_cols` 在某些情况下为0（例如画布宽度尚未初始化时），导致在计算行数时出现除零错误：
+```python
+rows = (total_items + self.current_cols - 1) // self.current_cols  # 当current_cols=0时出错
+```
+
+### 解决方案
+在所有涉及 `self.current_cols` 的地方添加检查，确保不为0：
+```python
+# 修复前
+rows = (total_items + self.current_cols - 1) // self.current_cols
+
+# 修复后
+cols = self.current_cols if self.current_cols > 0 else self._calculate_cols()
+if cols == 0:
+    cols = 1
+rows = (total_items + cols - 1) // cols
+self.current_cols = cols
+```
+
+### 涉及文件
+- `src/ui/folder_view.py`
+
+---
+
+> **文档版本**: 2.4  
+> **最后更新**: 2026-06-05  
 > **维护规则**: 每次修复错误后，必须在本文档中添加新记录
