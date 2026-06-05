@@ -139,45 +139,54 @@ class PluginManager:
         sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         
-        # 查找插件类
-        plugin_class = None
+        # 查找插件类 —— 支持多接口（一个类可同时实现多种插件接口）
+        # 注意：模块中可能导入了抽象基类自身（IFormatPlugin 等），
+        # 而 issubclass(Base, Base) 返回 True，必须排除基类本身。
+        candidate_classes = []  # [(type_name, class), ...]
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if (isinstance(attr, type) and 
                 attr.__name__ != 'ABC' and
                 not attr_name.startswith('_')):
                 
-                # 检查是否是正确的插件类型
-                if plugin_type == "format" and issubclass(attr, IFormatPlugin):
-                    plugin_class = attr
-                    break
-                elif plugin_type == "function" and issubclass(attr, IFunctionPlugin):
-                    plugin_class = attr
-                    break
-                elif plugin_type == "extension" and issubclass(attr, IExtensionPlugin):
-                    plugin_class = attr
-                    break
+                if issubclass(attr, IFormatPlugin) and attr is not IFormatPlugin:
+                    candidate_classes.append(("format", attr))
+                if issubclass(attr, IFunctionPlugin) and attr is not IFunctionPlugin:
+                    candidate_classes.append(("function", attr))
+                if issubclass(attr, IExtensionPlugin) and attr is not IExtensionPlugin:
+                    candidate_classes.append(("extension", attr))
         
-        if plugin_class is None:
-            raise PluginLoadError(plugin_path, f"未找到 {plugin_type} 类型的插件类")
+        if not candidate_classes:
+            raise PluginLoadError(plugin_path, f"未找到任何插件类")
         
-        # 创建插件实例
-        plugin_instance = plugin_class()
+        # 对每个匹配的 (类型, 类) 创建实例并注册
+        instances = {}  # class → instance 缓存（同一类只实例化一次）
+        registered_any = False
         
-        # 获取插件元数据
-        metadata = self._extract_plugin_metadata(plugin_instance, plugin_type)
+        for reg_type, reg_class in candidate_classes:
+            # 同一类只创建一次实例
+            if reg_class not in instances:
+                instances[reg_class] = reg_class()
+            plugin_instance = instances[reg_class]
+            
+            # 提取元数据
+            metadata = self._extract_plugin_metadata(plugin_instance, reg_type)
+            
+            # 检查是否启用（使用 name:type 复合键支持同名多类型）
+            compound_key = f"{metadata.name}:{reg_type}"
+            if not self._is_plugin_enabled(metadata.name) and not self._is_plugin_enabled(compound_key):
+                logger.info(f"插件已禁用: {metadata.name} ({reg_type})")
+                continue
+            
+            # 注册
+            self._register_plugin(plugin_instance, reg_type, metadata)
+            registered_any = True
+            logger.info(f"插件加载成功: {metadata.name} ({reg_type})")
         
-        # 检查是否启用
-        plugin_name = metadata.name
-        if not self._is_plugin_enabled(plugin_name):
-            logger.info(f"插件已禁用: {plugin_name}")
+        if not registered_any:
             return
         
-        # 注册插件
-        self._register_plugin(plugin_instance, plugin_type, metadata)
-        
         self._loaded_plugins.add(plugin_path)
-        logger.info(f"插件加载成功: {plugin_name}")
     
     def _extract_plugin_metadata(self, plugin: Any, plugin_type: str) -> PluginMetadata:
         """
@@ -445,6 +454,92 @@ class PluginManager:
     def get_all_plugin_metadata(self) -> Dict[str, PluginMetadata]:
         """获取所有插件元数据"""
         return self._plugin_metadata.copy()
+    
+    def get_all_plugin_info(self) -> List[Dict[str, Any]]:
+        """
+        获取所有插件的完整信息（含启用/禁用状态）
+        
+        Returns:
+            插件信息列表，每个元素包含：
+            - name: 插件名称
+            - type: 插件类型 (format/function/extension)
+            - version: 版本号
+            - author: 作者
+            - description: 描述
+            - enabled: 是否已启用
+            - class_name: 插件类名
+            - extra: 额外信息
+        """
+        plugins = []
+        seen = set()  # (name, type) 去重
+        
+        # 遍历三种插件注册表（直接读实例，支持多接口插件）
+        type_configs = [
+            ("format",    self._format_plugins,    ["extensions", "capabilities"]),
+            ("function",  self._function_plugins,  ["plugin_type", "parameters"]),
+            ("extension", self._extension_plugins, ["target_module", "priority"]),
+        ]
+        
+        for ptype, p_dict, extra_fields in type_configs:
+            for name, plugin in p_dict.items():
+                key = (name, ptype)
+                if key in seen:
+                    continue
+                seen.add(key)
+                
+                # 从元数据获取基础信息，从实例获取额外信息
+                metadata = self._plugin_metadata.get(name)
+                info = {
+                    "name": name,
+                    "type": ptype,
+                    "version": metadata.version if metadata else "—",
+                    "author": metadata.author if metadata else "—",
+                    "description": metadata.description if metadata else (
+                        getattr(plugin, 'description', '') if plugin else ''
+                    ),
+                    "enabled": self._is_plugin_enabled(name),
+                    "class_name": plugin.__class__.__name__ if plugin else None,
+                    "extra": {}
+                }
+                
+                # 填充类型特定的额外信息
+                if plugin:
+                    for field in extra_fields:
+                        if field == "extensions" and hasattr(plugin, 'extensions'):
+                            info["extra"]["extensions"] = plugin.extensions
+                        elif field == "capabilities" and hasattr(plugin, 'get_capabilities'):
+                            info["extra"]["capabilities"] = plugin.get_capabilities()
+                        elif field == "plugin_type" and hasattr(plugin, 'plugin_type'):
+                            info["extra"]["plugin_type"] = plugin.plugin_type
+                        elif field == "parameters" and hasattr(plugin, 'get_parameters'):
+                            info["extra"]["parameters"] = plugin.get_parameters()
+                        elif field == "target_module" and hasattr(plugin, 'target_module'):
+                            info["extra"]["target_module"] = plugin.target_module
+                        elif field == "priority" and hasattr(plugin, 'priority'):
+                            info["extra"]["priority"] = plugin.priority
+                
+                plugins.append(info)
+        
+        # 检查 plugin_config 中的残留条目
+        registered_names = {name for name, _ in seen}
+        for config_name, config in self._plugin_configs.items():
+            if config_name not in registered_names and config_name not in self._plugin_metadata:
+                plugins.append({
+                    "name": config_name,
+                    "type": "unknown",
+                    "version": "—",
+                    "author": "—",
+                    "description": "(配置残留，插件文件可能已删除)",
+                    "enabled": config.get("enabled", True),
+                    "class_name": None,
+                    "extra": {}
+                })
+        
+        # 按类型排序
+        type_order = {"format": 0, "function": 1, "extension": 2, "unknown": 3}
+        plugins.sort(key=lambda p: (type_order.get(p["type"], 99), p["name"]))
+        
+        return plugins
     
     def execute_function_plugin(self, plugin_name: str, file_list: List[str], 
                                **kwargs) -> Dict[str, Any]:

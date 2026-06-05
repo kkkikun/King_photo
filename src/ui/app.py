@@ -112,10 +112,73 @@ class MainWindow:
         # 默认显示文件夹模式
         self._show_folder_mode()
 
+        # 初始化插件子菜单
+        self.root.after(50, self._refresh_function_plugin_menu)
+
+        # 拖放支持
+        self._enable_drag_drop()
+
         # 自动打开上次的文件夹
         last_folder = self.config.get('paths.last_folder', '')
         if last_folder and os.path.isdir(last_folder):
             self.root.after(100, lambda: self._open_folder_path(last_folder))
+
+    def _enable_drag_drop(self):
+        """启用文件拖放支持"""
+        if os.name != 'nt':
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            GWL_EXSTYLE = -20
+            WS_EX_ACCEPTFILES = 0x00000010
+
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_ACCEPTFILES)
+
+            # 注册 WM_DROPFILES 处理
+            self.root.createcommand('tk_drop', self._on_drop_files)
+            self.root.tk.call('package', 'require', 'tkdnd')
+            self.root.drop_target_register('*')
+            self.root.dnd_bind('<<Drop>>', self._on_drop_files)
+        except Exception:
+            # tkdnd 不可用，尝试 ctypes 方式
+            self._drop_enabled = False
+            return
+        self._drop_enabled = True
+
+    def _on_drop_files(self, event=None):
+        """处理拖放文件/文件夹"""
+        try:
+            if hasattr(event, 'data'):
+                path = event.data.strip('{}')
+            elif isinstance(event, str):
+                path = event.strip('{}')
+            else:
+                # ctypes 方式获取拖放路径
+                import ctypes
+                from ctypes import wintypes
+                WM_DROPFILES = 0x0233
+                # 简化处理：使用 Tk 的 selection 获取
+                try:
+                    path = self.root.tk.call('tkdnd::drop::handle', event)
+                except Exception:
+                    path = self.root.selection_get(selection='DROP_FILES')
+                if not path:
+                    return
+                path = path.strip('{}')
+
+            path = path.replace('/', '\\')
+            if os.path.isdir(path):
+                self._open_folder_path(path)
+            elif os.path.isfile(path):
+                self._show_single_mode()
+                self.single_view.load_image(path)
+                self._update_status(f"已加载: {os.path.basename(path)}")
+        except Exception:
+            pass  # 静默失败，不影响正常使用
 
     # ============================================================
     # 快捷键绑定
@@ -136,6 +199,7 @@ class MainWindow:
         self.root.bind('<F5>', lambda e: self._refresh())
         self.root.bind('<F1>', lambda e: self._show_help())
         self.root.bind('<Escape>', lambda e: self._on_escape())
+        self.root.bind('<Control-p>', lambda e: self._show_plugin_manager())
 
     def _refresh(self):
         """刷新（F5）"""
@@ -209,6 +273,16 @@ class MainWindow:
         repair_menu.add_separator()
         repair_menu.add_command(label="仅修复后缀", command=lambda: self._repair_with_dialog(fix_extension=True, fix_time=False))
         repair_menu.add_command(label="仅修复时间", command=lambda: self._repair_with_dialog(fix_extension=False, fix_time=True))
+
+        # 插件菜单
+        plugin_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="插件", menu=plugin_menu)
+        plugin_menu.add_command(label="插件管理", command=self._show_plugin_manager)
+        plugin_menu.add_separator()
+
+        # 动态功能插件子菜单
+        self._function_plugin_menu = tk.Menu(plugin_menu, tearoff=0)
+        plugin_menu.add_cascade(label="运行功能插件", menu=self._function_plugin_menu)
 
         # 帮助菜单
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -711,16 +785,80 @@ class MainWindow:
         """显示关于"""
         messagebox.showinfo(
             "关于",
-            "King_photo v1.3.1\n\n"
+            "King_photo v1.6.0\n\n"
             "图片元信息编辑与修复工具\n\n"
             "功能特性:\n"
             "- 查看/编辑图片元信息（EXIF/XMP）\n"
             "- 批量重命名（20+变量）\n"
-            "- 修复文件时间\n"
-            "- 修复文件后缀\n"
+            "- 修复文件时间/后缀\n"
             "- 支持多种图片格式\n"
-            "- 插件系统 + 统一API"
+            "- 完整插件系统：格式/功能/扩展\n"
+            "- 插件管理 UI（启用/禁用/自动触发）\n"
+            "- 通用功能插件执行\n"
+            "- 拖放文件夹支持\n"
+            "- 虚拟滚动（大文件夹优化）\n"
+            "- Ctrl+P 快速打开插件管理"
         )
+
+    def _show_plugin_manager(self):
+        """打开插件管理对话框"""
+        from .plugin_manager_dialog import PluginManagerDialog
+        dialog = PluginManagerDialog(self.root, self.api)
+        # 对话框关闭后刷新子菜单（状态可能变了）
+        self.root.wait_window(dialog)
+        self._refresh_function_plugin_menu()
+
+    def _refresh_function_plugin_menu(self):
+        """刷新功能插件子菜单（根据当前启用的插件动态生成）"""
+        menu = self._function_plugin_menu
+        menu.delete(0, tk.END)  # 清空
+
+        try:
+            # 触发延迟初始化（确保插件已加载）
+            self.api.get_all_plugin_info()
+            plugins = self.api._plugin_manager.get_function_plugins()
+        except Exception:
+            plugins = []
+
+        if not plugins:
+            menu.add_command(
+                label="（无可用功能插件）",
+                state=tk.DISABLED
+            )
+            return
+
+        for plugin in plugins:
+            if plugin.is_available():
+                label = f"{plugin.plugin_name} — {plugin.description}"
+                menu.add_command(
+                    label=label,
+                    command=lambda p=plugin: self._run_function_plugin(p.plugin_name)
+                )
+
+    def _run_function_plugin(self, plugin_name: str):
+        """运行指定的功能插件"""
+        # 确保 API 已初始化
+        try:
+            self.api._ensure_initialized()
+        except Exception:
+            pass
+
+        if self.current_mode != 'folder':
+            messagebox.showinfo("提示", "请先打开文件夹并选中图片")
+            return
+
+        selected_files = self.folder_view.get_selected_files()
+        if not selected_files:
+            messagebox.showinfo("提示", "请先在文件夹中选中要处理的图片")
+            return
+
+        from .generic_plugin_dialog import GenericPluginDialog
+        dialog = GenericPluginDialog(self.root, self.api, plugin_name, selected_files)
+        self.root.wait_window(dialog)
+
+        # 执行完成后刷新视图
+        if self.current_mode == 'folder':
+            self.folder_view.refresh()
 
     def _show_help(self):
         """显示帮助"""
@@ -739,8 +877,9 @@ class MainWindow:
   Ctrl+1       文件夹模式
   Ctrl+2       单图片模式
   F5           刷新
-  F1           帮助
+    F1           帮助
   ESC          取消选择
+  Ctrl+P       插件管理
 
 1. 打开文件夹模式:
    - 点击"打开文件夹"或 Ctrl+O

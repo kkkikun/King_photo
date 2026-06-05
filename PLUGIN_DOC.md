@@ -569,7 +569,50 @@ api.register_plugin(plugin)
 
 ---
 
-## 8. 常见问题
+## 8. v1.6.0 新增特性
+
+### 8.0.1 多接口插件（Multi-Interface Plugin）
+
+一个插件类可以同时实现多个接口，由 `PluginManager` 自动检测并分别注册：
+
+```python
+from src.api.plugin_interfaces import IExtensionPlugin, IFunctionPlugin
+
+class WatermarkPlugin(IExtensionPlugin, IFunctionPlugin):
+    # ── IExtensionPlugin ──
+    extension_name = "watermark"
+    target_module = "metadata_writer"
+    
+    # ── IFunctionPlugin ──
+    plugin_name = "watermark"
+    plugin_type = "image"
+    version = "1.0.0"
+    
+    def get_parameters(self): ...
+    def execute(self, file_list, **kwargs): ...
+```
+
+### 8.0.2 通用功能插件执行
+
+UI 层通过 `GenericPluginDialog` 自动读取 `get_parameters()` 生成表单，**无需为每个插件写 UI 代码**：
+
+```
+菜单"运行功能插件" → 动态子菜单（自动发现已启用功能插件）
+                    → GenericPluginDialog → 参数表单（str→Entry, int→Spinbox, bool→Checkbutton）
+                                         → execute() → ProgressDialog
+```
+
+### 8.0.3 扩展插件自动触发开关
+
+在插件管理对话框中，扩展插件卡片有"自动触发"复选框，控制钩子是否自动伴随核心操作执行。
+
+### 8.0.4 插件管理快捷键
+
+`Ctrl+P` 快速打开插件管理对话框。
+
+---
+
+## 9. 常见问题
 
 ### 8.1 插件无法加载
 
@@ -650,6 +693,6 @@ api.register_plugin(plugin)
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2026-05-30  
+**文档版本**: 1.1  
+**最后更新**: 2026-06-05  
 **维护者**: King_photo 开发团队

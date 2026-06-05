@@ -775,6 +775,21 @@ api = get_api()
 api.register_plugin(MyFormatPlugin())
 ```
 
+### 8.5 多接口插件（v1.6.0 新增）
+
+**规则：** 一个插件类可以同时实现多种接口（如 `IFunctionPlugin` + `IExtensionPlugin`），PluginManager 自动检测并分别注册。
+
+```python
+class WatermarkPlugin(IExtensionPlugin, IFunctionPlugin):
+    # IExtensionPlugin 钩子：自动伴随
+    # IFunctionPlugin 执行：独立运行
+```
+
+**优势：**
+- 一个类解决"独立使用 + 嵌入使用"两种场景
+- PluginManager 的 `_load_plugin_file()` 会自动检测所有接口并注册
+- UI 自然呈现两种入口（扩展钩子 + 功能菜单）
+
 ---
 
 ## 测试规则
@@ -1449,7 +1464,7 @@ grep -i "关键词" error_solutions.md
 
 ---
 
-**文档版本**: 2.2  
+**文档版本**: 2.3  
 **最后更新**: 2026-06-05  
-**对应项目版本**: v1.5.0  
+**对应项目版本**: v1.6.0  
 **维护者**: King_photo 开发团队

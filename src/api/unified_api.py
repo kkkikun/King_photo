@@ -34,7 +34,13 @@ class KingPhotoAPI:
             plugin_dir: 插件目录，可选
         """
         self._config_path = config_path
-        self._plugin_dir = plugin_dir or "plugins"
+        
+        # 插件目录：用户指定 > 基于项目根目录的绝对路径（避免 CWD 变化导致找不到）
+        if plugin_dir:
+            self._plugin_dir = plugin_dir
+        else:
+            _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            self._plugin_dir = os.path.join(_project_root, "plugins")
         
         # 初始化核心模块（延迟导入，避免循环依赖）
         self._format_detector = None
@@ -286,7 +292,11 @@ class KingPhotoAPI:
             操作结果字典
         """
         self._ensure_initialized()
-        return self._metadata_writer.write_metadata(filepath, metadata, copy_mode, output_dir)
+        return self._apply_extension_hooks(
+            "metadata_writer",
+            self._metadata_writer.write_metadata,
+            filepath, metadata, copy_mode, output_dir
+        )
     
     def write_metadata_from_filetime(self, filepath: str, 
                                    copy_mode: bool = False, output_dir: str = None) -> Dict[str, Any]:
@@ -302,7 +312,11 @@ class KingPhotoAPI:
             操作结果字典
         """
         self._ensure_initialized()
-        return self._metadata_writer.write_metadata_from_filetime(filepath, copy_mode, output_dir)
+        return self._apply_extension_hooks(
+            "metadata_writer",
+            self._metadata_writer.write_metadata_from_filetime,
+            filepath, copy_mode, output_dir
+        )
     
     def batch_write_metadata(self, file_list: List[str], metadata: Dict[str, Any],
                            copy_mode: bool = False, output_dir: str = None,
@@ -321,7 +335,9 @@ class KingPhotoAPI:
             批量操作结果字典
         """
         self._ensure_initialized()
-        return self._metadata_writer.batch_write_metadata(
+        return self._apply_extension_hooks(
+            "metadata_writer",
+            self._metadata_writer.batch_write_metadata,
             file_list, metadata, copy_mode, output_dir, progress_callback
         )
     
@@ -616,6 +632,16 @@ class KingPhotoAPI:
         
         return plugins
     
+    def get_all_plugin_info(self) -> List[Dict[str, Any]]:
+        """
+        获取所有插件完整信息（含启用/禁用状态）
+        
+        Returns:
+            插件信息列表
+        """
+        self._ensure_initialized()
+        return self._plugin_manager.get_all_plugin_info()
+    
     def enable_plugin(self, plugin_name: str) -> bool:
         """
         启用插件
@@ -641,6 +667,59 @@ class KingPhotoAPI:
         """
         self._ensure_initialized()
         return self._plugin_manager.disable_plugin(plugin_name)
+    
+    def _apply_extension_hooks(self, target_module: str, core_fn, *args, **kwargs):
+        """
+        对 core 方法施加扩展插件钩子（中间件模式）
+        
+        流程: before hooks → core_fn() → after hooks (逆序)
+        出错时: error hooks → 重新抛出
+        
+        Args:
+            target_module: 目标模块名 (如 'metadata_writer')
+            core_fn: 核心处理函数
+            *args, **kwargs: 传递给 core_fn 的参数
+            
+        Returns:
+            core_fn 的返回值（可能被 after hooks 修改）
+        """
+        hooks = self._plugin_manager.get_extension_hooks(target_module)
+        
+        # ── before hooks（按 priority 升序） ──
+        for hook in hooks:
+            try:
+                hook.before_execute(*args, **kwargs)
+            except Exception as e:
+                logger.warning(
+                    f"扩展插件 before_execute 失败 [{hook.extension_name}]: {e}"
+                )
+        
+        # ── 执行核心逻辑 ──
+        try:
+            result = core_fn(*args, **kwargs)
+        except Exception as e:
+            # ── error hooks ──
+            for hook in hooks:
+                try:
+                    hook.on_error(e, *args, **kwargs)
+                except Exception as ex:
+                    logger.warning(
+                        f"扩展插件 on_error 失败 [{hook.extension_name}]: {ex}"
+                    )
+            raise
+        
+        # ── after hooks（按 priority 降序） ──
+        for hook in reversed(hooks):
+            try:
+                modified = hook.after_execute(result, *args, **kwargs)
+                if modified is not None:
+                    result = modified
+            except Exception as e:
+                logger.warning(
+                    f"扩展插件 after_execute 失败 [{hook.extension_name}]: {e}"
+                )
+        
+        return result
     
     # ========== 配置API ==========
     

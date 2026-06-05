@@ -533,6 +533,72 @@ self.current_cols = cols
 
 ---
 
-> **文档版本**: 2.4  
+## 错误 21：4 个插件加载失败（issubclass 误匹配抽象基类）
+
+### 问题描述
+JPEG、PNG、WebP 格式插件和 Watermark 扩展插件无法加载，报错 `Can't instantiate abstract class without an implementation for abstract methods`。
+
+### 错误原因
+`_load_plugin_file()` 用 `dir(module)` 遍历找插件类，`dir()` 中包含了导入的抽象基类自身（IFormatPlugin 等）。而 `issubclass(Base, Base)` 返回 `True`，导致基类排在具体类前面时被选中并尝试实例化。
+
+### 解决方案
+在三处 `issubclass` 判断中各添加 `and attr is not IFormatPlugin / IFunctionPlugin / IExtensionPlugin`：
+
+```python
+if plugin_type == "format" and issubclass(attr, IFormatPlugin) and attr is not IFormatPlugin:
+```
+
+### 涉及文件
+- `src/api/plugin_manager.py`
+
+---
+
+## 错误 22：插件管理显示 0 个已注册插件
+
+### 问题描述
+从非项目根目录启动程序时，插件管理显示 0 个已注册插件。
+
+### 错误原因
+`KingPhotoAPI._plugin_dir` 默认值 `"plugins"` 是相对路径，`os.path.exists()` 取决于当前工作目录而非项目根目录。
+
+### 解决方案
+在 `KingPhotoAPI.__init__` 中用 `__file__` 计算绝对路径：
+
+```python
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+self._plugin_dir = os.path.join(_project_root, "plugins")
+```
+
+### 涉及文件
+- `src/api/unified_api.py`
+
+---
+
+## 错误 23：扩展插件钩子未接入处理流程
+
+### 问题描述
+`IExtensionPlugin` 的 `before_execute` / `after_execute` / `on_error` 钩子从未被调用，扩展插件形同虚设。
+
+### 错误原因
+`core/` 模块不感知插件系统，没有人调用 `PluginManager.get_extension_hooks()` 来触发钩子。
+
+### 解决方案
+在 `KingPhotoAPI` 中新增 `_apply_extension_hooks()` 中间件方法，包装 `write_metadata` / `write_metadata_from_filetime` / `batch_write_metadata` 三个 API 方法：
+
+```python
+def _apply_extension_hooks(self, target_module, core_fn, *args, **kwargs):
+    hooks = self._plugin_manager.get_extension_hooks(target_module)
+    for hook in hooks:           hook.before_execute(*args, **kwargs)
+    result = core_fn(*args, **kwargs)
+    for hook in reversed(hooks): result = hook.after_execute(result, *args, **kwargs)
+    return result
+```
+
+### 涉及文件
+- `src/api/unified_api.py`
+
+---
+
+> **文档版本**: 2.5  
 > **最后更新**: 2026-06-05  
 > **维护规则**: 每次修复错误后，必须在本文档中添加新记录

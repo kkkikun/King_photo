@@ -21,7 +21,7 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.5.0
+**版本**: v1.6.0
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
@@ -32,6 +32,7 @@
 6. **统一API层**：编程方式访问所有功能（v1.3.0）
 7. **插件系统**：动态扩展格式和功能支持（v1.3.0）
 8. **多格式图片加载器**：HEIC/AVIF/JXL/SVG/RAW 智能回退（v1.4.0）
+9. **完整插件管理系统**：插件管理UI + 动态菜单 + 多接口支持 + 自动触发开关 + 水印功能（v1.6.0）
 
 ---
 
@@ -55,11 +56,13 @@ King_photo/
 │   │
 │   ├── ui/                       # 用户界面 ⬅ 通过 get_api() 访问
 │   │   ├── __init__.py
-│   │   ├── app.py                # 主应用窗口（快捷键+工具提示+主题切换+格式检测流程）
-│   │   ├── folder_view.py        # 文件夹模式视图（适配窗口预览+信息面板+动态布局性能优化）
+│   │   ├── app.py                # 主应用窗口（快捷键+工具提示+主题切换+拖放+v1.6.0插件菜单）
+│   │   ├── folder_view.py        # 文件夹模式视图（虚拟滚动+动态布局 v1.5.0）
 │   │   ├── single_view.py        # 单图片模式视图
 │   │   ├── batch_dialog.py       # 批量操作对话框
 │   │   ├── format_mismatch_dialog.py # 格式不匹配交互对话框 v1.4.0
+│   │   ├── plugin_manager_dialog.py # 插件管理对话框 v1.6.0
+│   │   ├── generic_plugin_dialog.py # 通用功能插件执行对话框 v1.6.0
 │   │   ├── widgets.py            # 组件兼容层
 │   │   └── widgets/               # UI子模块
 │   │       ├── __init__.py
@@ -422,6 +425,44 @@ King_photo/
 **依赖**: `repair_engine`, `metadata_writer`
 
 **代码行数**: ~800行
+
+#### 4.5 plugin_manager_dialog.py — 插件管理对话框（v1.6.0）
+
+**职责**: 管理已安装插件的启用/禁用、自动触发开关、配置清理
+
+**主要类**:
+- `PluginManagerDialog`: 插件管理对话框
+
+**关键特性**:
+- 按类型分组卡片式展示（格式/功能/扩展）
+- 显示状态圆点、名称、版本、作者、描述
+- 一键启用/禁用切换
+- 扩展插件"自动触发"复选框
+- 功能插件"▶ 运行"按钮
+- 配置残留清理
+
+**依赖**: `ScrollableFrame`, `GenericPluginDialog`, `PluginManager`
+
+**代码行数**: ~400行
+
+#### 4.6 generic_plugin_dialog.py — 通用功能插件执行对话框（v1.6.0）
+
+**职责**: 根据 `IFunctionPlugin.get_parameters()` 自动生成参数表单并执行插件
+
+**主要类**:
+- `GenericPluginDialog`: 通用参数表单对话框
+
+**关键特性**:
+- 读取 `get_parameters()` 动态生成表单（str→Entry, int→Spinbox, bool→Checkbutton）
+- 参数校验（required/int 类型验证）
+- 后台线程执行 + ProgressDialog 进度显示
+- 完全通用：新增插件自动适配
+
+**依赖**: `ProgressDialog`, `IFunctionPlugin`
+
+**代码行数**: ~230行
+
+---
 
 ---
 
@@ -1050,7 +1091,7 @@ config.get('window.width', 1200)
 
 ---
 
-**文档版本**: 1.2  
+**文档版本**: 1.3  
 **最后更新**: 2026-06-05  
-**对应项目版本**: v1.5.0  
+**对应项目版本**: v1.6.0  
 **维护者**: King_photo 开发团队
