@@ -1,0 +1,527 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Per-format writable metadata field definitions. Based on ExifTool 13.59 official format support table.",
+    "last_updated": "2026-06-07",
+    "source": "https://exiftool.org/#supported",
+    "field_categories": {
+      "descriptive": "描述性元数据（标题、描述、作者、版权）——所有支持XMP的格式均可写",
+      "camera": "相机信息（品牌、型号、软件、镜头）——需EXIF支持",
+      "time": "时间信息（拍摄时间、数字化时间、创建时间）——需EXIF或XMP",
+      "technical": "拍摄技术参数（光圈、快门、ISO、焦距、方向）"
+    }
+  },
+  "JPEG": {
+    "label": "JPEG 图片",
+    "extensions": [
+      ".jpg",
+      ".jpeg",
+      ".jpe"
+    ],
+    "write_method": "piexif",
+    "fallback_method": "exiftool",
+    "exif_native": true,
+    "xmp_support": true,
+    "writable": {
+      "descriptive": {
+        "title": {
+          "field": "ImageDescription",
+          "piexif_tag": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:title"
+        },
+        "description": {
+          "field": "ImageDescription",
+          "piexif_tag": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:description"
+        },
+        "artist": {
+          "field": "Artist",
+          "piexif_tag": "Artist",
+          "exiftool_tag": "Artist",
+          "xmp_tag": "dc:creator"
+        },
+        "copyright": {
+          "field": "Copyright",
+          "piexif_tag": "Copyright",
+          "exiftool_tag": "Copyright",
+          "xmp_tag": "dc:rights"
+        }
+      },
+      "camera": {
+        "make": {
+          "field": "Make",
+          "piexif_tag": "Make",
+          "exiftool_tag": "Make"
+        },
+        "model": {
+          "field": "Model",
+          "piexif_tag": "Model",
+          "exiftool_tag": "Model"
+        },
+        "software": {
+          "field": "Software",
+          "piexif_tag": "Software",
+          "exiftool_tag": "Software"
+        },
+        "lens": {
+          "field": "LensModel",
+          "piexif_tag": null,
+          "exiftool_tag": "LensModel"
+        }
+      },
+      "time": {
+        "datetime": {
+          "field": "DateTimeOriginal",
+          "piexif_tag": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal",
+          "xmp_tag": "exif:DateTimeOriginal"
+        },
+        "datetime_original": {
+          "field": "DateTimeOriginal",
+          "piexif_tag": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal"
+        },
+        "datetime_digitized": {
+          "field": "DateTimeDigitized",
+          "piexif_tag": "DateTimeDigitized",
+          "exiftool_tag": "CreateDate"
+        },
+        "creation_time": {
+          "field": "DateTimeOriginal",
+          "piexif_tag": "DateTimeOriginal",
+          "exiftool_tag": "CreateDate",
+          "xmp_tag": "xmp:CreateDate"
+        }
+      },
+      "technical": {
+        "exposure_time": {
+          "field": "ExposureTime",
+          "piexif_tag": "ExposureTime",
+          "exiftool_tag": "ExposureTime",
+          "note": "曝光时间（秒或分数格式）"
+        },
+        "fnumber": {
+          "field": "FNumber",
+          "piexif_tag": "FNumber",
+          "exiftool_tag": "FNumber",
+          "note": "光圈值"
+        },
+        "iso": {
+          "field": "ISO",
+          "piexif_tag": "ISO",
+          "exiftool_tag": "ISO",
+          "note": "ISO感光度"
+        },
+        "focal_length": {
+          "field": "FocalLength",
+          "piexif_tag": "FocalLength",
+          "exiftool_tag": "FocalLength",
+          "note": "焦距(mm)"
+        },
+        "orientation": {
+          "field": "Orientation",
+          "piexif_tag": "Orientation",
+          "exiftool_tag": "Orientation",
+          "note": "旋转方向(1-8)"
+        }
+      }
+    }
+  },
+  "PNG": {
+    "label": "PNG 图片",
+    "extensions": [
+      ".png"
+    ],
+    "write_method": "exiftool",
+    "fallback_method": "pil_xmp",
+    "exif_native": false,
+    "xmp_support": true,
+    "note": "EXIF写入为非标准存储（ExifTool脚注3），文件管理器可能不识别，但程序间可传递",
+    "writable": {
+      "descriptive": {
+        "title": {
+          "field": "ImageDescription",
+          "exiftool_tag": "PNG:Description",
+          "xmp_tag": "dc:title"
+        },
+        "description": {
+          "field": "ImageDescription",
+          "exiftool_tag": "PNG:Description",
+          "xmp_tag": "dc:description"
+        },
+        "artist": {
+          "field": "Artist",
+          "exiftool_tag": "Artist",
+          "xmp_tag": "dc:creator"
+        },
+        "copyright": {
+          "field": "Copyright",
+          "exiftool_tag": "Copyright",
+          "xmp_tag": "dc:rights"
+        }
+      },
+      "camera": {
+        "make": {
+          "field": "Make",
+          "exiftool_tag": "Make",
+          "note": "非标准EXIF存储"
+        },
+        "model": {
+          "field": "Model",
+          "exiftool_tag": "Model",
+          "note": "非标准EXIF存储"
+        },
+        "software": {
+          "field": "Software",
+          "exiftool_tag": "Software",
+          "note": "非标准EXIF存储"
+        }
+      },
+      "time": {
+        "datetime": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal",
+          "xmp_tag": "photoshop:DateCreated"
+        },
+        "datetime_original": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal"
+        },
+        "datetime_digitized": {
+          "field": "DateTimeDigitized",
+          "exiftool_tag": "CreateDate"
+        },
+        "creation_time": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "CreateDate",
+          "xmp_tag": "xmp:CreateDate"
+        }
+      },
+      "technical": {
+        "exposure_time": {
+          "field": "ExposureTime",
+          "exiftool_tag": "ExposureTime"
+        },
+        "fnumber": {
+          "field": "FNumber",
+          "exiftool_tag": "FNumber"
+        },
+        "iso": {
+          "field": "ISO",
+          "exiftool_tag": "ISO"
+        },
+        "focal_length": {
+          "field": "FocalLength",
+          "exiftool_tag": "FocalLength"
+        },
+        "orientation": {
+          "field": "Orientation",
+          "exiftool_tag": "Orientation"
+        }
+      }
+    }
+  },
+  "GIF": {
+    "label": "GIF 图片",
+    "extensions": [
+      ".gif"
+    ],
+    "write_method": "exiftool",
+    "fallback_method": null,
+    "exif_native": false,
+    "xmp_support": true,
+    "note": "仅支持XMP元数据写入（ExifTool），不支持EXIF",
+    "writable": {
+      "descriptive": {
+        "title": {
+          "field": "ImageDescription",
+          "xmp_tag": "dc:title"
+        },
+        "description": {
+          "field": "ImageDescription",
+          "xmp_tag": "dc:description"
+        },
+        "artist": {
+          "field": "Artist",
+          "xmp_tag": "dc:creator"
+        },
+        "copyright": {
+          "field": "Copyright",
+          "xmp_tag": "dc:rights"
+        }
+      },
+      "time": {
+        "datetime": {
+          "field": "DateTimeOriginal",
+          "xmp_tag": "xmp:CreateDate"
+        },
+        "creation_time": {
+          "field": "DateTimeOriginal",
+          "xmp_tag": "xmp:CreateDate"
+        }
+      }
+    }
+  },
+  "WebP": {
+    "label": "WebP 图片",
+    "extensions": [
+      ".webp"
+    ],
+    "write_method": "exiftool",
+    "fallback_method": null,
+    "exif_native": true,
+    "xmp_support": true,
+    "note": "支持原生EXIF块（RIFF容器中）和XMP，无IPTC支持",
+    "writable": {
+      "descriptive": {
+        "title": {
+          "field": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:title"
+        },
+        "description": {
+          "field": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:description"
+        },
+        "artist": {
+          "field": "Artist",
+          "exiftool_tag": "Artist",
+          "xmp_tag": "dc:creator"
+        },
+        "copyright": {
+          "field": "Copyright",
+          "exiftool_tag": "Copyright",
+          "xmp_tag": "dc:rights"
+        }
+      },
+      "camera": {
+        "make": {
+          "field": "Make",
+          "exiftool_tag": "Make"
+        },
+        "model": {
+          "field": "Model",
+          "exiftool_tag": "Model"
+        },
+        "software": {
+          "field": "Software",
+          "exiftool_tag": "Software"
+        },
+        "lens": {
+          "field": "LensModel",
+          "exiftool_tag": "LensModel"
+        }
+      },
+      "time": {
+        "datetime": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal",
+          "xmp_tag": "exif:DateTimeOriginal"
+        },
+        "datetime_original": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal"
+        },
+        "datetime_digitized": {
+          "field": "DateTimeDigitized",
+          "exiftool_tag": "CreateDate"
+        },
+        "creation_time": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "CreateDate",
+          "xmp_tag": "xmp:CreateDate"
+        }
+      },
+      "technical": {
+        "exposure_time": {"field": "ExposureTime", "exiftool_tag": "ExposureTime"},
+        "fnumber":       {"field": "FNumber",      "exiftool_tag": "FNumber"},
+        "iso":           {"field": "ISO",          "exiftool_tag": "ISO"},
+        "focal_length":  {"field": "FocalLength",  "exiftool_tag": "FocalLength"},
+        "orientation":   {"field": "Orientation",  "exiftool_tag": "Orientation"}
+      }
+    }
+  },
+  "TIFF": {
+    "label": "TIFF 图片",
+    "extensions": [
+      ".tif",
+      ".tiff"
+    ],
+    "write_method": "piexif",
+    "fallback_method": "exiftool",
+    "exif_native": true,
+    "xmp_support": true,
+    "writable": {
+      "_inherit": "JPEG",
+      "note": "TIFF与JPEG使用相同的EXIF IFD结构，字段映射完全相同"
+    }
+  },
+  "HEIF": {
+    "label": "HEIC/HEIF 图片",
+    "extensions": [
+      ".heic",
+      ".heif"
+    ],
+    "write_method": "exiftool",
+    "fallback_method": null,
+    "exif_native": true,
+    "xmp_support": true,
+    "note": "需ExifTool处理；支持EXIF+XMP，不支持IPTC",
+    "writable": {
+      "descriptive": {
+        "title": {
+          "field": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:title"
+        },
+        "description": {
+          "field": "ImageDescription",
+          "exiftool_tag": "ImageDescription",
+          "xmp_tag": "dc:description"
+        },
+        "artist": {
+          "field": "Artist",
+          "exiftool_tag": "Artist",
+          "xmp_tag": "dc:creator"
+        },
+        "copyright": {
+          "field": "Copyright",
+          "exiftool_tag": "Copyright",
+          "xmp_tag": "dc:rights"
+        }
+      },
+      "camera": {
+        "make": {
+          "field": "Make",
+          "exiftool_tag": "Make"
+        },
+        "model": {
+          "field": "Model",
+          "exiftool_tag": "Model"
+        },
+        "software": {
+          "field": "Software",
+          "exiftool_tag": "Software"
+        },
+        "lens": {
+          "field": "LensModel",
+          "exiftool_tag": "LensModel"
+        }
+      },
+      "time": {
+        "datetime": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal",
+          "xmp_tag": "exif:DateTimeOriginal"
+        },
+        "datetime_original": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "DateTimeOriginal"
+        },
+        "datetime_digitized": {
+          "field": "DateTimeDigitized",
+          "exiftool_tag": "CreateDate"
+        },
+        "creation_time": {
+          "field": "DateTimeOriginal",
+          "exiftool_tag": "CreateDate",
+          "xmp_tag": "xmp:CreateDate"
+        }
+      },
+      "technical": {
+        "exposure_time": {"field": "ExposureTime", "exiftool_tag": "ExposureTime"},
+        "fnumber":       {"field": "FNumber",      "exiftool_tag": "FNumber"},
+        "iso":           {"field": "ISO",          "exiftool_tag": "ISO"},
+        "focal_length":  {"field": "FocalLength",  "exiftool_tag": "FocalLength"},
+        "orientation":   {"field": "Orientation",  "exiftool_tag": "Orientation"}
+      }
+    }
+  },
+  "RAW_CR2": {
+    "_inherit": "HEIF",
+    "label": "Canon RAW (CR2)",
+    "extensions": [
+      ".cr2"
+    ]
+  },
+  "RAW_NEF": {
+    "_inherit": "HEIF",
+    "label": "Nikon RAW (NEF)",
+    "extensions": [
+      ".nef"
+    ]
+  },
+  "RAW_ARW": {
+    "_inherit": "HEIF",
+    "label": "Sony RAW (ARW)",
+    "extensions": [
+      ".arw"
+    ]
+  },
+  "RAW_DNG": {
+    "_inherit": "HEIF",
+    "label": "Adobe DNG",
+    "extensions": [
+      ".dng"
+    ]
+  },
+  "AVIF": {
+    "_inherit": "HEIF",
+    "label": "AVIF 图片",
+    "extensions": [
+      ".avif"
+    ],
+    "note": "AVIF使用与HEIF相同的ISOBMFF容器，元数据支持相同"
+  },
+  "JPEG_XL": {
+    "_inherit": "HEIF",
+    "label": "JPEG XL 图片",
+    "extensions": [
+      ".jxl"
+    ]
+  },
+  "PSD": {
+    "_inherit": "HEIF",
+    "label": "Photoshop PSD",
+    "extensions": [
+      ".psd"
+    ],
+    "note": "支持EXIF+IPTC+XMP完整元数据"
+  },
+  "SVG": {
+    "label": "SVG 矢量图",
+    "extensions": [
+      ".svg"
+    ],
+    "write_method": null,
+    "exif_native": false,
+    "xmp_support": false,
+    "note": "ExifTool对SVG仅读取，不支持任何元数据写入",
+    "writable": {}
+  },
+  "BMP": {
+    "label": "BMP 位图",
+    "extensions": [
+      ".bmp"
+    ],
+    "write_method": null,
+    "exif_native": false,
+    "xmp_support": false,
+    "note": "不支持任何元数据写入",
+    "writable": {}
+  },
+  "ICO": {
+    "label": "ICO 图标",
+    "extensions": [
+      ".ico"
+    ],
+    "write_method": null,
+    "exif_native": false,
+    "xmp_support": false,
+    "note": "不支持任何元数据写入",
+    "writable": {}
+  }
+}

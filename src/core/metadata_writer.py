@@ -77,31 +77,45 @@ class MetadataWriter(IMetadataWriter):
         # 写入元信息
         success = False
 
-        # 获取文件扩展名
-        ext = os.path.splitext(output_path)[1].lower()
-        
-        # 对于PNG文件，优先使用exiftool写入，因为PIL写入的XMP可能不兼容Windows显示
-        if ext == '.png':
-            logger.info(f"PNG文件，优先使用exiftool写入: {output_path}")
+        # 获取格式路由信息
+        from ..utils.format_field_manager import get_field_manager
+        fm = get_field_manager()
+        format_name = format_info.get('format', 'Unknown')
+        write_method = fm.get_write_method(format_name)
+        needs_exiftool = format_info.get('needs_exiftool', False)
+        supports_exif = format_info.get('supports_exif', False)
+        supports_xmp = format_info.get('supports_xmp', False)
+
+        # 根据格式选择写入路径
+        if write_method == "exiftool" or needs_exiftool:
+            # PNG / GIF (XMP-only) / HEIC / RAW / AVIF / JXL / PSD
+            logger.info(f"{format_name} 文件，使用exiftool写入: {output_path}")
             success = MetadataWriter._write_with_exiftool(output_path, metadata)
-            # 如果exiftool写入失败，尝试使用PIL写入作为回退
-            if not success:
-                logger.warning(f"exiftool写入PNG失败，尝试使用PIL写入: {output_path}")
+            # PNG的PIL XMP回退
+            if not success and ext == '.png':
+                logger.warning(f"exiftool写入PNG失败，尝试PIL XMP回退: {output_path}")
                 success = XmpHandler.write_xmp(output_path, metadata)
-        elif format_info.get('needs_exiftool', False):
-            # 使用exiftool写入
-            success = MetadataWriter._write_with_exiftool(output_path, metadata)
-        else:
-            # 使用内置方法写入
-            if format_info.get('supports_exif', False):
+        elif write_method == "piexif":
+            # JPEG / TIFF：优先piexif，失败回退exiftool
+            logger.info(f"{format_name} 文件，使用piexif写入: {output_path}")
+            if supports_exif:
                 success = MetadataWriter._write_exif(output_path, metadata)
-            elif format_info.get('supports_xmp', False):
-                # 使用XMP写入
+            elif supports_xmp:
                 success = XmpHandler.write_xmp(output_path, metadata)
-            
-            # 如果内置方法写入失败，尝试使用exiftool作为回退
             if not success:
-                logger.warning(f"内置方法写入失败，尝试使用exiftool作为回退: {output_path}")
+                logger.warning(f"piexif写入失败，回退exiftool: {output_path}")
+                success = MetadataWriter._write_with_exiftool(output_path, metadata)
+        elif write_method is None:
+            # SVG / BMP / ICO：不支持写入
+            logger.warning(f"{format_name} 不支持元数据写入: {output_path}")
+        else:
+            # 回退逻辑
+            if supports_exif:
+                success = MetadataWriter._write_exif(output_path, metadata)
+            elif supports_xmp:
+                success = XmpHandler.write_xmp(output_path, metadata)
+            if not success:
+                logger.warning(f"写入失败，使用exiftool回退: {output_path}")
                 success = MetadataWriter._write_with_exiftool(output_path, metadata)
 
         if success:
@@ -414,7 +428,7 @@ class MetadataWriter(IMetadataWriter):
         success = False
         
         # 如果文件支持XMP，使用XMP写入时间
-        if format_info['supports_xmp']:
+        if format_info.get('supports_xmp', False):
             # 获取文件修改时间
             stat = os.stat(output_path)
             file_mtime = datetime.fromtimestamp(stat.st_mtime)

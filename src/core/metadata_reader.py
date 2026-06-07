@@ -181,128 +181,93 @@ class MetadataReader(IMetadataReader):
 
     @staticmethod
     def get_editable_fields(filepath: str) -> Dict[str, Any]:
-        """获取可编辑的字段（根据格式适配）"""
+        """获取可编辑的字段（基于 editable_fields.json 数据库适配）"""
+        from ..utils.format_field_manager import get_field_manager
+
         metadata = MetadataReader.read_metadata(filepath)
         format_info = FormatDetector.get_format_info(filepath)
-        
+        format_name = format_info.get('format', 'Unknown')
+
+        fm = get_field_manager()
+        writable = fm.get_writable_fields(format_name)
+
         editable = {}
-        
+
         # 添加格式信息，便于UI显示
         editable['_format_info'] = {
-            'format': format_info.get('format', 'Unknown'),
+            'format': format_name,
+            'format_label': fm.get_format_label(format_name),
             'supports_exif': format_info.get('supports_exif', False),
             'supports_xmp': format_info.get('supports_xmp', False),
             'needs_exiftool': format_info.get('needs_exiftool', False),
-            'extension': metadata.get('extension', ''),
+            'write_method': fm.get_write_method(format_name),
+            'note': fm._resolve(format_name).get('note', '') if fm._resolve(format_name) else '',
         }
-        
-        # 根据格式支持情况确定可编辑字段
-        supports_exif = format_info.get('supports_exif', False)
-        supports_xmp = format_info.get('supports_xmp', False)
-        needs_exiftool = format_info.get('needs_exiftool', False)
-        
-        # 1. 基本文件信息（所有格式都可显示，但不可编辑）
+
+        # 1. 基本文件信息（所有格式显示，不可编辑）
         basic_fields = [
-            ('filename', '文件名', False),
-            ('extension', '扩展名', False),
-            ('filesize', '文件大小', False),
-            ('width', '宽度', False),
-            ('height', '高度', False),
-            ('format', '格式', False),
+            ('filename', '文件名'),
+            ('extension', '扩展名'),
+            ('filesize', '文件大小'),
+            ('width', '宽度'),
+            ('height', '高度'),
+            ('format', '格式'),
         ]
-        
-        # 文件时间字段（所有格式都可显示，可编辑）
-        time_fields = [
-            ('file_modified', '修改时间', True),
-            ('file_created', '创建时间', True),
-        ]
-        
-        for field, label, editable_flag in basic_fields:
+        for field, label in basic_fields:
             if field in metadata:
                 editable[field] = {
                     'value': metadata[field],
                     'label': label,
-                    'editable': editable_flag,
+                    'editable': False,
                     'category': 'basic',
                 }
-        
-        # 添加时间字段
-        for field, label, editable_flag in time_fields:
-            value = metadata.get(field, '')
-            if value is None:
-                value = ''
+
+        # 文件系统时间（所有格式可显示+可编辑）
+        for field, label in [('file_modified', '修改时间'), ('file_created', '创建时间')]:
             editable[field] = {
-                'value': value,
+                'value': metadata.get(field, '') or '',
                 'label': label,
-                'editable': editable_flag,
+                'editable': True,
                 'category': 'time',
             }
-        
-        # 2. 添加所有可能编辑的字段
-        
-        # 通用XMP字段
-        xmp_editable_fields = [
-            ('title', '标题', True),
-            ('description', '描述', True),
-            ('artist', '作者', True),
-            ('copyright', '版权', True),
-        ]
-        
-        for field, label, editable_flag in xmp_editable_fields:
-            # 如果字段不存在，设置默认值
-            value = metadata.get(field, '')
-            if value is None:
-                value = ''
-            
-            # 根据格式设置可编辑标志
-            field_editable = editable_flag and supports_xmp
-            
-            editable[field] = {
-                'value': value,
-                'label': label,
-                'editable': field_editable,
-                'category': 'xmp',
-            }
-        
-        # EXIF字段
-        exif_editable_fields = [
-            ('make', '相机品牌', True),
-            ('model', '相机型号', True),
-            ('software', '软件', True),
-            ('lens', '镜头型号', True),
-            ('datetime', '拍摄时间', True),
-            ('exposure_time', '曝光时间', False),
-            ('fnumber', '光圈', False),
-            ('iso', 'ISO', False),
-            ('focal_length', '焦距', False),
-            ('orientation', '方向', False),
-        ]
-        
-        for field, label, editable_flag in exif_editable_fields:
-            # 如果字段不存在，设置默认值
-            value = metadata.get(field, '')
-            if value is None:
-                value = ''
-            
-            # 根据格式设置可编辑标志
-            field_editable = editable_flag and supports_exif
-            
-            editable[field] = {
-                'value': value,
-                'label': label,
-                'editable': field_editable,
-                'category': 'exif',
-            }
-        
-        # 3. 对于需要exiftool的格式（HEIF、RAW等），所有字段都可编辑
-        if needs_exiftool:
-            # 确保所有EXIF和XMP字段都标记为可编辑
-            for field_key, field_info in editable.items():
-                if field_key.startswith('_'):
-                    continue
-                if field_info.get('category') in ['exif', 'xmp']:
-                    field_info['editable'] = True
-        
+
+        # 2. 根据数据库适配字段
+        # descriptive → category: 'xmp'
+        # camera → category: 'exif'
+        # time → category: 'exif'
+        # technical → category: 'exif', 但 writable=false
+
+        field_labels = {
+            'title': '标题', 'description': '描述', 'artist': '作者', 'copyright': '版权',
+            'make': '相机品牌', 'model': '相机型号', 'software': '软件', 'lens': '镜头型号',
+            'datetime': '拍摄时间', 'datetime_original': '原始时间',
+            'datetime_digitized': '数字化时间', 'creation_time': '创建时间',
+            'exposure_time': '曝光时间', 'fnumber': '光圈', 'iso': 'ISO',
+            'focal_length': '焦距', 'orientation': '方向',
+        }
+
+        category_map = {
+            'descriptive': 'xmp',
+            'camera': 'exif',
+            'time': 'exif',
+            'technical': 'exif',
+        }
+
+        for category_name, fields in writable.items():
+            cat = category_map.get(category_name, 'exif')
+            for field_name, field_def in fields.items():
+                is_writable = field_def.get('writable', True) is not False
+                value = metadata.get(field_name, '')
+                if value is None:
+                    value = ''
+
+                editable[field_name] = {
+                    'value': value,
+                    'label': field_labels.get(field_name, field_name),
+                    'editable': is_writable,
+                    'category': cat,
+                }
+
         return editable
     
     @staticmethod

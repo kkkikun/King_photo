@@ -12,6 +12,7 @@ import ttkbootstrap as ttk
 from ..utils.constants import RENAME_VARIABLES, DEFAULT_RENAME_FORMAT
 from ..api import get_api
 from .widgets.scrollable import ScrollableFrame
+from .widgets.metadata import PlaceholderEntry, FIELD_PLACEHOLDERS
 
 
 class RenameDialog(tk.Toplevel):
@@ -555,41 +556,61 @@ class BatchMetadataDialog(tk.Toplevel):
         for field_name, field_info in fields.items():
             label = field_info.get('label', field_name)
             editable = field_info.get('editable', False)
+            value = field_info.get('value', '')
+            if value is None:
+                value = ''
+            placeholder = FIELD_PLACEHOLDERS.get(field_name, '')
             
             frame = ttk.Frame(group_frame)
             frame.pack(fill=tk.X, padx=5, pady=2)
             
-            # 根据可编辑状态设置颜色
             if editable:
-                label_fg = '#000000'  # 黑色
-                entry_state = 'normal'
+                label_fg = '#000000'
             else:
-                label_fg = '#888888'  # 灰色
-                entry_state = 'disabled'
+                label_fg = '#888888'
             
             ttk.Label(frame, text=f"{label}:", width=10, foreground=label_fg).pack(side=tk.LEFT)
             
-            var = tk.StringVar()
-            entry = ttk.Entry(frame, textvariable=var, state=entry_state)
-            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-            
-            self.entries[field_name] = var
+            if editable and placeholder:
+                # 使用占位提示输入框
+                entry = PlaceholderEntry(frame, width=30, placeholder=placeholder)
+                entry.set_value(str(value))
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                self.entries[field_name] = entry
+            elif not editable:
+                var = tk.StringVar(value=str(value))
+                entry = ttk.Entry(frame, textvariable=var, state='disabled')
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                self.entries[field_name] = var
+            else:
+                var = tk.StringVar(value=str(value))
+                entry = ttk.Entry(frame, textvariable=var)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                self.entries[field_name] = var
             self.entry_widgets[field_name] = entry
 
     def _on_ok(self):
         """确定"""
         metadata = {}
-        for field, var in self.entries.items():
+        for field, entry in self.entries.items():
             # 跳过内部字段
             if field.startswith('_'):
                 continue
             
-            # 检查entry是否可用（可编辑）
-            entry = self.entry_widgets.get(field)
-            if entry and str(entry['state']) == 'disabled':
-                continue
+            # PlaceholderEntry 实例
+            if isinstance(entry, PlaceholderEntry):
+                value = entry.get_real_value()
+            else:
+                # StringVar 实例
+                entry_w = self.entry_widgets.get(field)
+                if entry_w and hasattr(entry_w, 'cget'):
+                    try:
+                        if str(entry_w.cget('state')) == 'disabled':
+                            continue
+                    except Exception:
+                        logger.debug("检查 Entry 状态失败，跳过该字段", exc_info=True)
+                value = entry.get().strip()
             
-            value = var.get().strip()
             if value:
                 metadata[field] = value
 

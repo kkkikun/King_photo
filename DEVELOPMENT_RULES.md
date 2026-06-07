@@ -656,6 +656,27 @@ def get_best_time(filepath: str, time_source: str = 'auto') -> Optional[datetime
         return get_file_times(filepath)['modified']
 ```
 
+### 6.5 格式字段数据库（v1.7.0新增）
+
+**规则：** 每个图片格式的可编辑字段、写入方式、标签映射统一在 `config/editable_fields.json` 中维护，禁止在不同模块中重复定义格式适配逻辑。
+
+```python
+from src.utils.format_field_manager import get_field_manager
+
+fm = get_field_manager()
+# 查询某格式可写字段
+writable = fm.get_writable_fields("JPEG")
+# 检查某字段是否可写
+fm.is_field_writable("PNG", "exposure_time")
+# 获取推荐写入方式
+fm.get_write_method("HEIF")  # → "exiftool"
+```
+
+**涉及模块:**
+- `get_editable_fields()` → 读取数据库确定可编辑性
+- `write_metadata()` → 读取数据库路由写入路径
+- `_show_format_info()` → 读取数据库显示格式能力
+
 ---
 
 ## API开发规则（v1.3.0新增）
@@ -1464,7 +1485,7 @@ grep -i "关键词" error_solutions.md
 
 ---
 
-**文档版本**: 2.3  
-**最后更新**: 2026-06-05  
-**对应项目版本**: v1.6.0  
+**文档版本**: 2.4  
+**最后更新**: 2026-06-07  
+**对应项目版本**: v1.7.0  
 **维护者**: King_photo 开发团队

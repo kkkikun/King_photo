@@ -599,6 +599,69 @@ def _apply_extension_hooks(self, target_module, core_fn, *args, **kwargs):
 
 ---
 
-> **文档版本**: 2.5  
-> **最后更新**: 2026-06-05  
+## 错误 24：format_detector 键名不一致导致格式适配完全失效
+
+### 问题描述
+JPEG 文件的 EXIF 元数据字段在 UI 中全部显示为不可编辑（灰色），用户无法编辑任何元数据。
+
+### 错误原因
+`FormatDetector.get_format_info()` 返回的字典使用键名 `exif_support` / `xmp_support` / `need_exiftool`，但 `metadata_reader.py` 和 `metadata_writer.py` 查询的是 `supports_exif` / `supports_xmp` / `needs_exiftool`。三个键全部不匹配，`.get()` 永远返回默认值 `False`，导致所有 EXIF/XMP 字段被错误标记为不可编辑。
+
+### 解决方案
+统一 `format_detector.py` 返回键名与消费者一致：
+```python
+# 修改前
+'exif_support': supports_exif, 'xmp_support': supports_xmp, 'need_exiftool': needs_exiftool
+# 修改后
+'supports_exif': supports_exif, 'supports_xmp': supports_xmp, 'needs_exiftool': needs_exiftool
+```
+同时将此修复推广到 `get_supported_formats()` 和 `register_custom_format()` 中的所有同名键。
+
+### 涉及文件
+- `src/core/format_detector.py`
+
+---
+
+## 错误 25：PlaceholderEntry 占位提示不显示
+
+### 问题描述
+元数据编辑器中空字段应显示灰色格式提示（如 `YYYY:MM:DD HH:MM:SS`），但实际未显示。
+
+### 错误原因
+原 `PlaceholderEntry` 实现过于复杂——构造函数中调用 `_show_placeholder()` 时 widget 可能尚未完全就绪，且自定义 `insert` 覆盖和 `_has_real_content` 标记引入了状态追踪 bug。
+
+### 解决方案
+简化为 `_is_placeholder_shown` 布尔开关，移除构造函数中的占位调用和自定义 `insert` 覆盖。`set_value()` 在外部调用时统一设置初始状态。
+
+### 涉及文件
+- `src/ui/widgets/metadata.py`
+
+---
+
+## 错误 26：多处 `except: pass` + UI 直接导入 core
+
+### 问题描述
+项目审计发现 9 个文件中存在裸 `except: pass` 吞异常模式，以及 `format_mismatch_dialog.py` 直接 `from ..core` 导入 core 模块，违反架构规则。
+
+### 错误原因
+早期代码为快速开发留下了大量 `except: pass` 占位符，后续未补充日志记录。
+
+### 解决方案
+1. `format_mismatch_dialog.py`：改用 `get_api().detect_format()` 替代直接导入 `FormatDetector`
+2. 所有 `except: pass` 改为 `logger.debug/warning()` 至少记录一条日志
+3. 涉及文件：`app.py`（3处）、`batch_dialog.py`、`repair_engine.py`、`xmp_handler.py`、`plugin_manager_dialog.py`
+
+### 涉及文件
+- `src/ui/format_mismatch_dialog.py`
+- `src/ui/app.py`
+- `src/ui/batch_dialog.py`
+- `src/core/repair_engine.py`
+- `src/core/xmp_handler.py`
+- `src/ui/plugin_manager_dialog.py`
+- `src/core/format_detector.py`（类型提示修正）
+
+---
+
+> **文档版本**: 2.7  
+> **最后更新**: 2026-06-08  
 > **维护规则**: 每次修复错误后，必须在本文档中添加新记录

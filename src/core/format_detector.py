@@ -276,7 +276,7 @@ class FormatDetector(IFormatDetector):
         return 'unknown'
 
     @staticmethod
-    def get_format_info(filepath: str) -> dict:
+    def get_format_info(filepath: str) -> Dict[str, Any]:
         """获取格式详细信息"""
         format_name, is_consistent = FormatDetector.get_real_format(filepath)
         
@@ -293,9 +293,9 @@ class FormatDetector(IFormatDetector):
                 'extension': ext,
                 'is_image': is_image,
                 'is_video': is_video,
-                'exif_support': False,
-                'xmp_support': False,
-                'need_exiftool': False,
+                'supports_exif': False,
+                'supports_xmp': False,
+                'needs_exiftool': False,
                 'is_consistent': is_consistent,
             }
 
@@ -317,9 +317,9 @@ class FormatDetector(IFormatDetector):
             'extension': ext,
             'is_image': is_image,
             'is_video': is_video,
-            'exif_support': supports_exif,
-            'xmp_support': supports_xmp,
-            'need_exiftool': needs_exiftool,
+            'supports_exif': supports_exif,
+            'supports_xmp': supports_xmp,
+            'needs_exiftool': needs_exiftool,
             'is_consistent': is_consistent,
         }
     
@@ -337,8 +337,17 @@ class FormatDetector(IFormatDetector):
                 - xmp_support: 是否支持XMP
                 - need_exiftool: 是否需要ExifTool
         """
-        # 验证配置格式
-        required_keys = ['extensions', 'exif_support', 'xmp_support', 'need_exiftool']
+        # 验证配置格式（兼容新旧两种键名）
+        required_keys = ['extensions']
+        supports_exif_keys = ['supports_exif', 'exif_support']
+        supports_xmp_keys = ['supports_xmp', 'xmp_support']
+        needs_keys = ['needs_exiftool', 'need_exiftool']
+        if not any(k in format_config for k in supports_exif_keys):
+            format_config['supports_exif'] = False
+        if not any(k in format_config for k in supports_xmp_keys):
+            format_config['supports_xmp'] = False
+        if not any(k in format_config for k in needs_keys):
+            format_config['needs_exiftool'] = False
         for key in required_keys:
             if key not in format_config:
                 raise ValueError(f"格式配置缺少必要字段: {key}")
@@ -351,9 +360,9 @@ class FormatDetector(IFormatDetector):
         
         # 添加到SUPPORTED_FORMATS
         extensions = format_config['extensions']
-        exif_support = format_config['exif_support']
-        xmp_support = format_config['xmp_support']
-        need_exiftool = format_config['need_exiftool']
+        exif_support = format_config.get('supports_exif', format_config.get('exif_support', False))
+        xmp_support = format_config.get('supports_xmp', format_config.get('xmp_support', False))
+        need_exiftool = format_config.get('needs_exiftool', format_config.get('need_exiftool', False))
         
         SUPPORTED_FORMATS[format_name] = (extensions, exif_support, xmp_support, need_exiftool)
         
@@ -382,9 +391,9 @@ class FormatDetector(IFormatDetector):
         for format_name, (extensions, exif_support, xmp_support, need_exiftool) in SUPPORTED_FORMATS.items():
             formats[format_name] = {
                 'extensions': extensions,
-                'exif_support': exif_support,
-                'xmp_support': xmp_support,
-                'need_exiftool': need_exiftool,
+                'supports_exif': exif_support,
+                'supports_xmp': xmp_support,
+                'needs_exiftool': need_exiftool,
                 'is_custom': False
             }
         

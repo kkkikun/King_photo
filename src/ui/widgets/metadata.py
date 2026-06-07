@@ -12,6 +12,86 @@ from ...api import get_api
 
 logger = logging.getLogger(__name__)
 
+# ── 字段格式提示（灰色占位文字） ──
+FIELD_PLACEHOLDERS = {
+    # 时间
+    'datetime':           'YYYY:MM:DD HH:MM:SS',
+    'datetime_original':  'YYYY:MM:DD HH:MM:SS',
+    'datetime_digitized': 'YYYY:MM:DD HH:MM:SS',
+    'creation_time':      'YYYY:MM:DD HH:MM:SS',
+    'file_modified':      'YYYY-MM-DD HH:MM:SS',
+    'file_created':       'YYYY-MM-DD HH:MM:SS',
+    # 技术参数
+    'exposure_time':      '例如: 1/60 或 0.0167',
+    'fnumber':            '例如: 2.8',
+    'iso':                '例如: 400',
+    'focal_length':       '例如: 50',
+    'orientation':        '1=正常 3=180° 6=右转90° 8=左转90°',
+    # 描述
+    'title':              '请输入图片标题',
+    'description':        '请输入图片描述',
+    'artist':             '请输入作者名称',
+    'copyright':          '请输入版权信息 (© 2024)',
+    # 相机
+    'make':               '例如: Canon',
+    'model':              '例如: EOS 5D Mark IV',
+    'software':           '例如: Adobe Photoshop 2024',
+    'lens':               '例如: EF 24-70mm f/2.8L',
+}
+
+PLACEHOLDER_COLOR = '#888888'   # 灰色（darkly/lightly 主题均可见）
+NORMAL_COLOR = '#000000'         # 正常（ttkbootstrap 会在 dark 主题自动转为浅色）
+
+
+class PlaceholderEntry(tk.Entry):
+    """带格式提示的输入框
+    
+    - 无内容时：浅灰色显示格式提示
+    - 点击获得焦点：自动清除提示，黑色文字
+    - 有实际数据时：黑色文字正常显示
+    - 失焦且为空：恢复灰色提示
+    """
+    
+    def __init__(self, master, placeholder: str = '', **kwargs):
+        super().__init__(master, **kwargs)
+        self.placeholder = placeholder
+        self._is_placeholder_shown = False
+        
+        self.bind('<FocusIn>', self._on_focus_in)
+        self.bind('<FocusOut>', self._on_focus_out)
+    
+    def _show_placeholder(self):
+        self.delete(0, tk.END)
+        self.insert(0, self.placeholder)
+        self.config(fg=PLACEHOLDER_COLOR)
+        self._is_placeholder_shown = True
+    
+    def _on_focus_in(self, event):
+        if self._is_placeholder_shown:
+            self.delete(0, tk.END)
+            self.config(fg=NORMAL_COLOR)
+            self._is_placeholder_shown = False
+    
+    def _on_focus_out(self, event):
+        if self.get().strip() == '' and self.placeholder:
+            self._show_placeholder()
+    
+    def set_value(self, value):
+        """设置实际值"""
+        if value:
+            self.delete(0, tk.END)
+            self.config(fg=NORMAL_COLOR)
+            self.insert(0, str(value))
+            self._is_placeholder_shown = False
+        elif self.placeholder:
+            self._show_placeholder()
+    
+    def get_real_value(self) -> str:
+        """获取用户实际输入（占位时返回空字符串）"""
+        if self._is_placeholder_shown:
+            return ''
+        return self.get().strip()
+
 
 class MetadataEditorWidget(tk.Frame):
     """元信息编辑组件"""
@@ -25,26 +105,11 @@ class MetadataEditorWidget(tk.Frame):
         
         self.api = get_api()
 
-        self.canvas = tk.Canvas(self)
-        self.scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas)
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor=tk.NW)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.scrollable_frame.bind("<MouseWheel>", self._on_mousewheel)
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        # 复用 ScrollableFrame（规则 5.3）
+        from .scrollable import ScrollableFrame
+        self._scroll = ScrollableFrame(self)
+        self._scroll.pack(fill=tk.BOTH, expand=True)
+        self.scrollable_frame = self._scroll.scrollable_frame
 
     def load_metadata(self, metadata: dict):
         """加载元信息到编辑器"""
@@ -134,15 +199,12 @@ class MetadataEditorWidget(tk.Frame):
             
             label = field_info.get('label', field_name)
             editable = field_info.get('editable', False)
+            placeholder = FIELD_PLACEHOLDERS.get(field_name, '')
             
             if editable:
                 label_fg = '#000000'
-                entry_state = 'normal'
-                entry_bg = '#FFFFFF'
             else:
                 label_fg = '#888888'
-                entry_state = 'disabled'
-                entry_bg = '#F0F0F0'
             
             tk.Label(
                 self.scrollable_frame,
@@ -152,15 +214,25 @@ class MetadataEditorWidget(tk.Frame):
                 fg=label_fg
             ).grid(row=row, column=0, sticky=tk.W, padx=10, pady=2)
             
-            if editable:
+            if editable and placeholder:
+                # 可编辑 + 有格式提示 → PlaceholderEntry
+                entry = PlaceholderEntry(
+                    self.scrollable_frame, width=40,
+                    placeholder=placeholder
+                )
+                entry.set_value(value)
+            elif editable:
+                # 可编辑但无格式提示 → 普通 Entry
                 entry = tk.Entry(self.scrollable_frame, width=40)
                 entry.insert(0, str(value))
-                entry.grid(row=row, column=1, sticky=tk.W + tk.E, padx=5, pady=2)
-                self.entries[field_name] = entry
             else:
-                entry = tk.Entry(self.scrollable_frame, width=40, state=entry_state, bg=entry_bg)
+                # 只读字段
+                entry = tk.Entry(self.scrollable_frame, width=40,
+                               state='disabled', bg='#F0F0F0')
                 entry.insert(0, str(value))
-                entry.grid(row=row, column=1, sticky=tk.W + tk.E, padx=5, pady=2)
+            
+            entry.grid(row=row, column=1, sticky=tk.W + tk.E, padx=5, pady=2)
+            self.entries[field_name] = entry
             
             row += 1
         
@@ -172,7 +244,10 @@ class MetadataEditorWidget(tk.Frame):
 
         metadata = {}
         for field, entry in self.entries.items():
-            value = entry.get().strip()
+            if isinstance(entry, PlaceholderEntry):
+                value = entry.get_real_value()
+            else:
+                value = entry.get().strip()
             if value:
                 metadata[field] = value
 
@@ -181,7 +256,10 @@ class MetadataEditorWidget(tk.Frame):
     def get_editable_metadata(self) -> dict:
         metadata = {}
         for field, entry in self.entries.items():
-            value = entry.get().strip()
+            if isinstance(entry, PlaceholderEntry):
+                value = entry.get_real_value()
+            else:
+                value = entry.get().strip()
             if value:
                 metadata[field] = value
         return metadata

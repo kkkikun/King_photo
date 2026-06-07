@@ -178,7 +178,7 @@ class MainWindow:
                 self.single_view.load_image(path)
                 self._update_status(f"已加载: {os.path.basename(path)}")
         except Exception:
-            pass  # 静默失败，不影响正常使用
+            logger.debug("拖放处理失败", exc_info=True)
 
     # ============================================================
     # 快捷键绑定
@@ -818,6 +818,7 @@ class MainWindow:
             self.api.get_all_plugin_info()
             plugins = self.api._plugin_manager.get_function_plugins()
         except Exception:
+            logger.warning("刷新功能插件菜单失败", exc_info=True)
             plugins = []
 
         if not plugins:
@@ -841,7 +842,7 @@ class MainWindow:
         try:
             self.api._ensure_initialized()
         except Exception:
-            pass
+            logger.debug("API 初始化跳过（已就绪）", exc_info=True)
 
         if self.current_mode != 'folder':
             messagebox.showinfo("提示", "请先打开文件夹并选中图片")

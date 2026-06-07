@@ -353,7 +353,7 @@ class RepairEngine(IRepairEngine):
                         try:
                             os.remove(actual_path)
                         except Exception:
-                            pass
+                            logger.debug(f"中间文件清理失败: {actual_path}", exc_info=True)
 
                     results['time'] = {
                         'success': True,

@@ -247,12 +247,13 @@ class FormatMismatchDialog(tk.Toplevel):
         try:
             os.startfile(self.mismatched_files[self.current_index]['filepath'])
         except Exception:
-            pass
+            logger.warning("打开文件失败", exc_info=True)
 
 
 def collect_mismatched_files(file_list: List[str]) -> List[dict]:
     """收集格式不匹配且需要弹窗的文件"""
-    from ..core.format_detector import FormatDetector
+    from ..api import get_api
+    api = get_api()
     from ..utils.format_impact import get_impact, should_prompt_user
     
     mismatched = []
@@ -260,14 +261,15 @@ def collect_mismatched_files(file_list: List[str]) -> List[dict]:
         if not os.path.exists(fp):
             continue
         
-        header_format = FormatDetector.detect_by_header(fp)
-        ext_format = FormatDetector.detect_by_extension(fp)
+        format_info = api.detect_format(fp)
+        header_format = format_info.get('format') if format_info else None
+        ext_format = os.path.splitext(fp)[1].lstrip('.').upper()
         
         if header_format and ext_format and header_format != ext_format:
             impact_info = get_impact(header_format, ext_format)
             if should_prompt_user(header_format, ext_format):
                 current_ext = os.path.splitext(fp)[1].lower()
-                correct_ext = FormatDetector.get_correct_extension(fp) or ".{}".format(header_format.lower())
+                correct_ext = ".{}".format(header_format.lower())
                 
                 mismatched.append({
                     'filepath': fp,

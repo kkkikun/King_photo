@@ -21,10 +21,10 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.6.0
+**版本**: v1.7.0
 
 ### 核心功能
-1. 图片元信息查看与编辑（EXIF、XMP、IPTC）
+1. 图片元信息查看与编辑（EXIF、XMP、IPTC）— **格式精确适配**（v1.7.0）
 2. 批量重命名（支持20+变量）
 3. 文件修复（后缀修复、时间修复）+ **格式不匹配智能检测**（v1.4.0）
 4. 交互式预览（适配窗口 + 自由缩放 + 拖拽平移）
@@ -88,6 +88,7 @@ King_photo/
 │       ├── error_handler.py      # 统一错误处理
 │       ├── logging_config.py     # 日志配置
 │       ├── error_report.py       # 错误报告
+│       ├── format_field_manager.py # 格式字段管理器 v1.7.0
 │       ├── image_loader.py       # 统一图片加载器 v1.4.0
 │       └── format_impact.py      # 格式影响查询 v1.4.0
 │
@@ -99,6 +100,7 @@ King_photo/
 │
 ├── config/                       # 配置文件目录
 │   ├── settings.json             # 用户配置（含 ui.theme）
+│   ├── editable_fields.json      # 格式可编辑字段数据库 v1.7.0
 │   └── format_impact.json        # 格式影响规则 v1.4.0
 │
 ├── logs/                         # 日志文件目录
@@ -475,7 +477,7 @@ King_photo/
 |------|-----|------|------|
 | `thumbnail.py` | `ThumbnailWidget` | ~270 | 缩略图组件，支持异步加载、错误类型识别 |
 | `preview.py` | `ImagePreviewWidget` | ~36 | 图片预览，自动缩放 |
-| `metadata.py` | `MetadataEditorWidget` | ~200 | 元数据编辑器，格式自适应字段、按类别分组 |
+| `metadata.py` | `MetadataEditorWidget`, `PlaceholderEntry` | ~280 | 元数据编辑器，格式自适应字段、格式占位提示、复用ScrollableFrame |
 | `progress.py` | `ProgressDialog` | ~85 | 进度对话框，支持取消操作 |
 | `scrollable.py` | `ScrollableFrame` | ~30 | 可滚动框架，鼠标滚轮支持 |
 
@@ -753,6 +755,25 @@ KingPhotoError (基类)
 | `export_to_file(report, filepath)` | 导出到文件 |
 
 **代码行数**: ~250行
+
+#### 8. format_field_manager.py — 格式字段管理器（v1.7.0 新增）
+
+**职责**: 加载 `editable_fields.json`，提供每个格式的可编辑字段查询 API
+
+**主要类**:
+- `FormatFieldManager`: 格式字段管理器（单例）
+
+**关键方法**:
+| 方法 | 功能 | 返回值 |
+|------|------|--------|
+| `get_writable_fields(format_name)` | 获取某格式所有可写字段定义 | `Dict[str, Any]` |
+| `is_field_writable(format_name, field_name)` | 检查字段是否可写 | `bool` |
+| `get_write_method(format_name)` | 获取推荐写入方式 | `Optional[str]` |
+| `get_all_writable_field_names(format_name)` | 获取所有可写字段名 | `list` |
+
+**数据来源**: `config/editable_fields.json`（基于 ExifTool 13.59 官方格式支持表）
+
+**代码行数**: ~130行
 
 ---
 
@@ -1091,7 +1112,7 @@ config.get('window.width', 1200)
 
 ---
 
-**文档版本**: 1.3  
-**最后更新**: 2026-06-05  
-**对应项目版本**: v1.6.0  
+**文档版本**: 1.4  
+**最后更新**: 2026-06-07  
+**对应项目版本**: v1.7.0  
 **维护者**: King_photo 开发团队

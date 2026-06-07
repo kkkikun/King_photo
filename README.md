@@ -267,6 +267,24 @@ King_photo/
 
 ## 更新日志
 
+### v1.7.0 (2026-06-07)
+
+#### Bug Fixes
+- **修复格式适配完全失效**：`format_detector.py` 返回键名与 reader/writer 查询键名不一致（`exif_support` vs `supports_exif`），导致所有 EXIF/XMP 字段被错误标记为不可编辑（JPEG 无法编辑元数据）
+- **修复 `metadata_writer.py` KeyError 崩溃**：方括号访问不存在的键改为 `.get()`
+- **修复 PlaceholderEntry 占位提示不显示**：简化实现、适配暗色主题、覆盖 batch_dialog 批量编辑入口
+
+#### New Features
+- **格式可编辑字段数据库** (`config/editable_fields.json`)：基于 ExifTool 13.59 官方格式支持表，精确为 12 种图片格式定义可写字段和标签映射
+- **格式字段管理器** (`format_field_manager.py`)：单例查询 API，替代硬编码格式适配逻辑
+- **元数据编辑占位提示**：空字段显示灰色格式提示（如 `YYYY:MM:DD HH:MM:SS`），有数据则显示原值，点击自动清除
+
+#### Improvements
+- **字段编辑范围扩大**：技术参数（ISO/光圈/快门/焦距/方向）改为可编辑
+- **GIF 元数据支持**：可通过 ExifTool 写入 XMP 元数据
+- **metadata.py 重构**：复用 `ScrollableFrame` 替代手写 Canvas+Scrollbar
+- **batch_dialog 同步**：批量编辑对话框同样支持 PlaceholderEntry
+
 ### v1.6.0 (2026-06-05)
 
 #### New Features

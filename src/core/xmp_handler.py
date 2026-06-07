@@ -127,7 +127,7 @@ class XmpHandler:
                             result[clean_name] = text
 
         except ET.ParseError:
-            pass
+            logger.debug("XMP XML 解析错误（非关键）", exc_info=True)
 
         return result
 

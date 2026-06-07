@@ -431,5 +431,5 @@ class PluginManagerDialog(tk.Toplevel):
             if hasattr(main, '_refresh_function_plugin_menu'):
                 main._refresh_function_plugin_menu()
         except Exception:
-            pass
+            logger.debug("通知主窗口刷新菜单失败", exc_info=True)
         super().destroy()
