@@ -714,6 +714,15 @@ target_module = "metadata_writer"
 
 ---
 
-**文档版本**: 1.1  
-**最后更新**: 2026-06-05  
+## 相关文档
+
+- **API.md** - 详细的API接口文档，包含所有API方法的详细说明、参数、返回值和示例
+- **PROJECT_STRUCTURE.md** - 项目结构说明书
+- **DEVELOPMENT_RULES.md** - 项目开发规则
+- **error_solutions.md** - 错误解决记录
+
+---
+
+**文档版本**: 1.2  
+**最后更新**: 2026-06-08  
 **维护者**: King_photo 开发团队

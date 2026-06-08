@@ -21,7 +21,7 @@
 **项目名称**: King_photo - 图片元信息编辑与修复工具  
 **项目类型**: Python桌面GUI应用  
 **技术栈**: Python 3.9+ / tkinter + ttkbootstrap / Pillow / piexif / lxml / exiftool  
-**版本**: v1.7.0
+**版本**: v1.7.1
 
 ### 核心功能
 1. 图片元信息查看与编辑（EXIF、XMP、IPTC）— **格式精确适配**（v1.7.0）
@@ -122,17 +122,22 @@ King_photo/
 │   ├── test_metadata_writer.py
 │   ├── test_repair_engine.py
 │   ├── test_helpers.py
+│   ├── test_exif_handler.py
+│   ├── test_file_processor.py
+│   ├── test_xmp_handler.py
 │   └── test_data/                # 测试数据
 │
 ├── run.py                        # 启动脚本
 ├── build.py                      # 打包脚本
-├── api_example.py                # API使用示例（v1.3.0新增）
+├── api_example.py                # API使用示例（v1.7.1）
 ├── test_program.py               # 程序测试脚本
+├── .gitignore                    # Git忽略规则
 ├── requirements.txt              # 依赖列表
 ├── README.md                     # 项目说明
 ├── PLUGIN_DOC.md                 # 插件开发文档（v1.3.0新增）
+├── API.md                        # API接口文档（v1.7.1）
 ├── DEVELOPMENT_RULES.md          # 开发规则
-├── error_solutions.md            # 错误解决记录（20条）
+├── error_solutions.md            # 错误解决记录（26条）
 └── PROJECT_STRUCTURE.md          # 项目结构说明书（本文件）
 ```
 
@@ -861,7 +866,7 @@ if __name__ == '__main__':
 
 **测试配置**: `conftest.py` 提供共享 fixtures（`sample_jpg`, `sample_png`, `tmp_output_dir` 等）
 
-**测试数据**: `test/` 目录包含各种格式的真实图片（jpg/png/jpeg/webp/gif等）
+**测试数据**: 使用项目外部 `test/` 目录下的真实图片（`test/修复前/`、`test/其他/` 等）
 
 ---
 
@@ -1063,13 +1068,13 @@ config.get('window.width', 1200)
 
 | 模块 | 文件数 | 代码行数（估计） |
 |------|--------|------------------|
-| core/ | 7 | ~2,500行 |
-| ui/ | 6 + 5 widgets | ~3,500行 |
-| api/ | 4 | ~1,500行 |
+| core/ | 8 | ~2,500行 |
+| ui/ | 9 + 6 widgets | ~3,500行 |
+| api/ | 5 | ~1,500行 |
 | plugins/ | 8 | ~500行 |
-| utils/ | 10 | ~2,300行 |
-| 入口/测试 | 15 | ~2,000行 |
-| **总计** | **55** | **~12,300行** |
+| utils/ | 11 | ~2,300行 |
+| 入口/测试 | 18 | ~2,000行 |
+| **总计** | **~65** | **~12,300行** |
 
 ---
 
@@ -1083,12 +1088,12 @@ config.get('window.width', 1200)
 4. **查看修复流程**: `src/core/repair_engine.py`
 5. **查看UI主窗口**: `src/ui/app.py`
 6. **查看缩略图组件**: `src/ui/widgets/thumbnail.py` → `ThumbnailWidget`
-12. **查看错误解决方案**: `error_solutions.md`（18条记录）
 7. **查看ExifTool集成**: `src/utils/exiftool_wrapper.py`
 8. **查看常量定义**: `src/utils/constants.py`
 9. **查看API接口**: `src/api/unified_api.py` (v1.3.0)
 10. **查看插件接口**: `src/api/plugin_interfaces.py` (v1.3.0)
 11. **查看插件开发文档**: `PLUGIN_DOC.md` (v1.3.0)
+12. **查看错误解决方案**: `error_solutions.md`（26条记录）
 
 ### 添加新功能
 
@@ -1112,7 +1117,7 @@ config.get('window.width', 1200)
 
 ---
 
-**文档版本**: 1.4  
-**最后更新**: 2026-06-07  
-**对应项目版本**: v1.7.0  
+**文档版本**: 1.5  
+**最后更新**: 2026-06-08  
+**对应项目版本**: v1.7.1  
 **维护者**: King_photo 开发团队

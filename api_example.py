@@ -1,5 +1,5 @@
 """
-King_photo API 使用示例（v1.4.0）
+King_photo API 使用示例（v1.7.1）
 演示如何使用模块化API — 包括格式检测、元数据读写、修复、格式影响查询、图片加载
 """
 
@@ -164,7 +164,7 @@ def example_configuration():
 
 
 def example_format_impact():
-    """格式影响查询示例（v1.4.0）"""
+    """格式影响查询示例（v1.7.1）"""
     print("\n=== 格式影响查询 ===")
     
     # HEIC 伪装成 PNG → CRITICAL
@@ -186,7 +186,7 @@ def example_format_impact():
 
 
 def example_image_loader():
-    """图片加载器示例（v1.4.0）"""
+    """图片加载器示例（v1.7.1）"""
     print("\n=== 图片加载器 ===")
     
     fmt = get_available_formats()
@@ -216,7 +216,7 @@ def main():
         example_plugin_operations()
         example_configuration()
         
-        # v1.4.0 新增
+        # v1.7.1 新增
         example_format_impact()
         example_image_loader()
         

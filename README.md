@@ -205,6 +205,8 @@ King_photo/
 │   │   ├── single_view.py   # 单图片模式视图
 │   │   ├── batch_dialog.py  # 批量操作对话框
 │   │   ├── format_mismatch_dialog.py # 格式不匹配交互对话框 v1.4.0
+│   │   ├── plugin_manager_dialog.py # 插件管理对话框 v1.6.0
+│   │   ├── generic_plugin_dialog.py # 通用功能插件执行对话框 v1.6.0
 │   │   ├── widgets.py       # 组件兼容层（re-export）
 │   │   └── widgets/          # UI子模块
 │   │       ├── thumbnail.py  # 缩略图组件
@@ -231,15 +233,17 @@ King_photo/
 │       ├── error_report.py     # 错误报告
 │       ├── exiftool_wrapper.py # exiftool封装
 │       ├── image_loader.py     # 统一图片加载器 v1.4.0
-│       └── format_impact.py    # 格式影响查询 v1.4.0
+│       ├── format_impact.py    # 格式影响查询 v1.4.0
+│       └── format_field_manager.py # 格式字段管理器 v1.7.0
 ├── plugins/                  # 插件目录（v1.3.0 新增）
-│   ├── formats/              # 格式插件（PNG、HEIC、WebP）
-│   ├── functions/            # 功能插件（批量重命名、批量修复）
+│   ├── formats/              # 格式插件（PNG、HEIC、WebP、JPEG）
+│   ├── functions/            # 功能插件（批量重命名、批量修复、批量导出）
 │   ├── extensions/           # 扩展插件（水印等）
 │   └── plugin_config.json    # 插件配置
 ├── tests/                   # 测试代码
 ├── config/                  # 配置文件
 │   ├── settings.json        # 用户配置
+│   ├── editable_fields.json # 格式可编辑字段数据库 v1.7.0
 │   └── format_impact.json   # 格式影响规则 v1.4.0
 ├── requirements.txt         # 依赖
 ├── api_example.py           # API使用示例
@@ -248,7 +252,7 @@ King_photo/
 ├── PLUGIN_DOC.md            # 插件开发文档
 ├── DEVELOPMENT_RULES.md     # 开发规范
 ├── PROJECT_STRUCTURE.md     # 项目结构说明
-├── error_solutions.md       # 错误解决记录（20条）
+├── error_solutions.md       # 错误解决记录（26条）
 ├── .gitignore
 └── README.md
 ```
@@ -272,6 +276,12 @@ King_photo/
 #### New Features
 - **扩展钩子全链路接入**：`IExtensionPlugin.target_module` 支持列表/通配符，水印可自动伴随修复、重命名、复制等所有可写操作
 - **多目标挂载**：用户编辑插件文件即可增减 target，无需 UI 改动
+- **API接口文档**：新增详细的API.md文档，包含所有API方法的详细说明、参数、返回值和示例
+- **文档管理规则**：在DEVELOPMENT_RULES.md中添加文档管理和版本控制规则
+
+#### Improvements
+- **文档更新**：更新api_example.py版本号至v1.7.1，更新PROJECT_STRUCTURE.md添加API.md引用
+- **版本同步**：确保所有文档版本号与项目版本一致
 
 ### v1.7.0 (2026-06-07)
 
