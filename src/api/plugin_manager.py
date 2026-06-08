@@ -582,8 +582,12 @@ class PluginManager:
         hooks = []
         
         for plugin in self._extension_plugins.values():
-            if plugin.target_module == target_module and plugin.is_enabled():
-                hooks.append(plugin)
+            targets = plugin.target_module
+            if isinstance(targets, str):
+                targets = [targets]
+            if target_module in targets or '*' in targets:
+                if plugin.is_enabled():
+                    hooks.append(plugin)
         
         # 按优先级排序
         hooks.sort(key=lambda x: x.priority)

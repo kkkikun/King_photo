@@ -31,8 +31,9 @@ class WatermarkPlugin(IExtensionPlugin, IFunctionPlugin):
         return "watermark"
 
     @property
-    def target_module(self) -> str:
-        return "metadata_writer"
+    def target_module(self):
+        """水印伴随这些操作自动触发。用户可以自行增减。"""
+        return ["metadata_writer", "repair_engine", "file_processor"]
 
     @property
     def priority(self) -> int:

@@ -443,7 +443,9 @@ class KingPhotoAPI:
             修复结果字典
         """
         self._ensure_initialized()
-        return self._repair_engine.repair(
+        return self._apply_extension_hooks(
+            "repair_engine",
+            self._repair_engine.repair,
             filepath, output_dir, fix_extension, fix_time, time_source, rename_format
         )
     
@@ -467,8 +469,10 @@ class KingPhotoAPI:
             批量修复结果字典
         """
         self._ensure_initialized()
-        return self._repair_engine.batch_repair(
-            file_list, output_dir, fix_extension, fix_time, 
+        return self._apply_extension_hooks(
+            "repair_engine",
+            self._repair_engine.batch_repair,
+            file_list, output_dir, fix_extension, fix_time,
             time_source, rename_format, progress_callback
         )
     
@@ -486,7 +490,11 @@ class KingPhotoAPI:
             批量修复结果字典
         """
         self._ensure_initialized()
-        return self._repair_engine.batch_repair_extension(file_list, output_dir, progress_callback)
+        return self._apply_extension_hooks(
+            "repair_engine",
+            self._repair_engine.batch_repair_extension,
+            file_list, output_dir, progress_callback
+        )
     
     # ========== 文件处理API ==========
     
@@ -519,7 +527,11 @@ class KingPhotoAPI:
             重命名结果字典
         """
         self._ensure_initialized()
-        return self._file_processor.rename_files(file_list, pattern, output_dir, **kwargs)
+        return self._apply_extension_hooks(
+            "file_processor",
+            self._file_processor.rename_files,
+            file_list, pattern, output_dir, **kwargs
+        )
     
     def copy_files(self, file_list: List[str], output_dir: str, 
                   preserve_structure: bool = True) -> Dict[str, Any]:
@@ -535,7 +547,11 @@ class KingPhotoAPI:
             复制结果字典
         """
         self._ensure_initialized()
-        return self._file_processor.copy_files(file_list, output_dir, preserve_structure)
+        return self._apply_extension_hooks(
+            "file_processor",
+            self._file_processor.copy_files,
+            file_list, output_dir, preserve_structure
+        )
     
     def move_files(self, file_list: List[str], output_dir: str,
                   preserve_structure: bool = True) -> Dict[str, Any]:
@@ -551,7 +567,11 @@ class KingPhotoAPI:
             移动结果字典
         """
         self._ensure_initialized()
-        return self._file_processor.move_files(file_list, output_dir, preserve_structure)
+        return self._apply_extension_hooks(
+            "file_processor",
+            self._file_processor.move_files,
+            file_list, output_dir, preserve_structure
+        )
     
     def delete_files(self, file_list: List[str], 
                     backup: bool = False, backup_dir: str = None) -> Dict[str, Any]:

@@ -602,7 +602,28 @@ UI 层通过 `GenericPluginDialog` 自动读取 `get_parameters()` 生成表单�
                                          → execute() → ProgressDialog
 ```
 
-### 8.0.3 扩展插件自动触发开关
+### 8.0.3 扩展插件多目标挂载（v1.7.1）
+
+`IExtensionPlugin.target_module` 支持列表和通配符：
+
+```python
+# 挂在多个操作上 — 用户自由增减
+target_module = ["metadata_writer", "repair_engine", "file_processor"]
+
+# 挂在所有可写操作
+target_module = ["*"]
+
+# 单个字符串也兼容
+target_module = "metadata_writer"
+```
+
+**可用的 target 值：**
+- `metadata_writer` — 元数据写入
+- `repair_engine` — 文件修复
+- `file_processor` — 重命名/复制/移动
+- `'*'` — 所有可写操作
+
+### 8.0.4 扩展插件自动触发开关
 
 在插件管理对话框中，扩展插件卡片有"自动触发"复选框，控制钩子是否自动伴随核心操作执行。
 

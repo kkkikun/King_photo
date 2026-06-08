@@ -796,20 +796,24 @@ api = get_api()
 api.register_plugin(MyFormatPlugin())
 ```
 
-### 8.5 多接口插件（v1.6.0 新增）
+### 8.5 多接口插件 + 多目标挂载（v1.6.0 + v1.7.1）
 
-**规则：** 一个插件类可以同时实现多种接口（如 `IFunctionPlugin` + `IExtensionPlugin`），PluginManager 自动检测并分别注册。
+**规则：** 一个插件类可以同时实现多种接口，扩展插件的 `target_module` 支持列表/通配符。
 
 ```python
 class WatermarkPlugin(IExtensionPlugin, IFunctionPlugin):
-    # IExtensionPlugin 钩子：自动伴随
+    # IExtensionPlugin 钩子：自动伴随，多目标挂载
+    target_module = ["metadata_writer", "repair_engine", "file_processor"]
+    # 或通配符: target_module = ["*"]
+    
     # IFunctionPlugin 执行：独立运行
 ```
 
-**优势：**
-- 一个类解决"独立使用 + 嵌入使用"两种场景
-- PluginManager 的 `_load_plugin_file()` 会自动检测所有接口并注册
-- UI 自然呈现两种入口（扩展钩子 + 功能菜单）
+**可用的 target 值：** `metadata_writer`, `repair_engine`, `file_processor`, `'*'`
+
+**用户自定义：** 编辑插件文件即可增减 target，无需改 UI。
+
+---
 
 ---
 

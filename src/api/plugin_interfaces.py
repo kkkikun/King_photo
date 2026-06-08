@@ -180,8 +180,15 @@ class IExtensionPlugin(ABC):
     
     @property
     @abstractmethod
-    def target_module(self) -> str:
-        """目标模块 ('format_detector', 'metadata_reader', 'metadata_writer', 'repair_engine')"""
+    def target_module(self):
+        """目标模块，可以是单个字符串或列表。
+        
+        'metadata_writer' — 元数据写入操作
+        'repair_engine'   — 文件修复操作
+        'file_processor'  — 重命名/复制/移动操作
+        '*'               — 所有可写操作
+        示例: ['metadata_writer', 'repair_engine']
+        """
         pass
     
     @property
